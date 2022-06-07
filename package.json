@@ -6,6 +6,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Yaël GUILLOUX <yael.guilloux@gmail.com>",
   "license": "ISC"
 }
