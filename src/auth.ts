@@ -7,7 +7,7 @@
  * Usage: bun run auth
  */
 
-import { loginAnthropic, anthropicOAuthProvider } from "@mariozechner/pi-ai/utils/oauth";
+import { loginAnthropic, anthropicOAuthProvider } from "@mariozechner/pi-ai/oauth";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
