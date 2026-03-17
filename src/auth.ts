@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { anthropicOAuthProvider, loginAnthropic } from '@mariozechner/pi-ai/oauth'
+import { anthropicOAuthProvider, loginAnthropic } from '@yaelg/pi-ai/oauth'
 
 const ENV_FILE = resolve(import.meta.dir, '../.env')
 const CREDENTIALS_FILE = resolve(import.meta.dir, '../.credentials.json')
