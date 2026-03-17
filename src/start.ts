@@ -46,10 +46,12 @@ async function main() {
   const client = new Anthropic(
     isOAuth
       ? {
-          apiKey: undefined as any,
+          apiKey: null as any,
           authToken: apiKey,
+          dangerouslyAllowBrowser: true,
           defaultHeaders: {
             "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+            "anthropic-dangerous-direct-browser-access": "true",
             "user-agent": "zidane/2.0.0",
             "x-app": "cli",
           },
