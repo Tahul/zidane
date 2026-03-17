@@ -1,11 +1,15 @@
 {
   "name": "zidane",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "ZidaneJS",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "auth": "bun run src/auth.ts"
   },
   "author": "Yaël GUILLOUX <yael.guilloux@gmail.com>",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@mariozechner/pi-ai": "^0.58.4"
+  }
 }
