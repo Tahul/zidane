@@ -20,7 +20,7 @@ export interface AgentHooks {
   'tool:before': (ctx: { name: string, input: Record<string, unknown> }) => void
   'tool:after': (ctx: { name: string, input: Record<string, unknown>, result: string }) => void
   'tool:error': (ctx: { name: string, input: Record<string, unknown>, error: Error }) => void
-  'agent:done': (ctx: { totalIn: number, totalOut: number, turns: number }) => void
+  'agent:done': (ctx: { totalIn: number, totalOut: number, turns: number, elapsed: number }) => void
 }
 
 export interface AgentRunOptions {
@@ -31,7 +31,7 @@ export interface AgentRunOptions {
 
 export interface Agent {
   hooks: Hookable<AgentHooks>
-  run: (options: AgentRunOptions) => Promise<{ totalIn: number, totalOut: number, turns: number }>
+  run: (options: AgentRunOptions) => Promise<{ totalIn: number, totalOut: number, turns: number, elapsed: number }>
   meta: Record<string, unknown>
 }
 
@@ -60,6 +60,7 @@ export function createAgent({ harness, provider }: AgentOptions) {
 
     let totalIn = 0
     let totalOut = 0
+    const startTime = Date.now()
 
     async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
       const toolDef = harnesses[harness][name]
@@ -112,7 +113,7 @@ export function createAgent({ harness, provider }: AgentOptions) {
       await hooks.callHook('turn:after', { turn, usage: result.usage })
 
       if (result.done) {
-        const stats = { totalIn, totalOut, turns: turn + 1 }
+        const stats = { totalIn, totalOut, turns: turn + 1, elapsed: Date.now() - startTime }
         await hooks.callHook('agent:done', stats)
         return true
       }
@@ -137,7 +138,7 @@ export function createAgent({ harness, provider }: AgentOptions) {
         return { totalIn, totalOut, turns: turn + 1 }
     }
 
-    const stats = { totalIn, totalOut, turns: MAX_TURNS }
+    const stats = { totalIn, totalOut, turns: MAX_TURNS, elapsed: Date.now() - startTime }
     await hooks.callHook('agent:done', stats)
     return stats
   }

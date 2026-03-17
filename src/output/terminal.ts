@@ -59,7 +59,11 @@ export async function setupTerminalOutput(agent: Agent, model: string, prompt: s
 
   agent.hooks.hook('system:before', ctx => console.log(chalk.cyan(`System: ${chalk.yellow(ctx.system)}`)))
 
-  agent.hooks.hook('agent:done', ({ totalIn, totalOut, turns }) => {
-    console.log(chalk.cyan(`💸 Tokens: ${chalk.yellow(totalIn)} in / ${chalk.green(totalOut)} out (${chalk.magenta(turns)} turn${turns > 1 ? 's' : ''})`))
+  agent.hooks.hook('agent:done', ({ totalIn, totalOut, turns, elapsed }) => {
+    const seconds = Math.floor(elapsed / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    const timeStr = minutes > 0 ? `${minutes}m ${remainingSeconds}s` : `${remainingSeconds}s`
+    console.log(chalk.cyan(`💸 Tokens: ${chalk.yellow(totalIn)} in / ${chalk.green(totalOut)} out (${chalk.magenta(turns)} turn${turns > 1 ? 's' : ''}) in ${chalk.green(timeStr)}`))
   })
 }
