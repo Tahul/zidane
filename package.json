@@ -1,7 +1,7 @@
 {
   "name": "zidane",
-  "version": "2.0.0",
-  "description": "ZidaneJS",
+  "version": "1.0.1",
+  "description": "an agent that goes straight to the goal",
   "type": "module",
   "scripts": {
     "auth": "bun run src/auth.ts",
