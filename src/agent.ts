@@ -84,7 +84,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     })
 
     const thinking = options.thinking ?? 'off'
-    const model = options.model || 'claude-opus-4-6'
+    const model = options.model ?? provider.meta.defaultModel
     const system = options.system || 'You are a helpful assistant.'
 
     const tools = harnesses[harness]

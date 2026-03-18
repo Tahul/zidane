@@ -49,7 +49,7 @@ export function anthropic(): Provider {
 
   return {
     name: 'anthropic',
-    meta: { isOAuth },
+    meta: { defaultModel: 'claude-opus-4-6', isOAuth },
 
     formatTools(tools: ToolSpec[]): Anthropic.Tool[] {
       return tools.map(t => ({

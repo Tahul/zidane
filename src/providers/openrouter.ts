@@ -1,10 +1,3 @@
-/**
- * OpenRouter provider.
- *
- * Uses the OpenAI-compatible chat completions API.
- * Set OPENROUTER_API_KEY in your environment.
- */
-
 import type { Provider, StreamCallbacks, StreamOptions, TurnResult } from '.'
 import {
   assistantMessage,
@@ -27,7 +20,7 @@ function getApiKey(): string {
 
 export function openrouter(defaultModel?: string): Provider {
   const apiKey = getApiKey()
-  const fallbackModel = defaultModel || 'anthropic/claude-sonnet-4'
+  const fallbackModel = defaultModel || 'anthropic/claude-sonnet-4-6'
 
   return {
     name: 'openrouter',

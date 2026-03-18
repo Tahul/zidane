@@ -52,7 +52,7 @@ export interface StreamOptions {
 
 export interface Provider {
   readonly name: string
-  readonly meta: Record<string, unknown>
+  readonly meta: { defaultModel: string } & Record<string, unknown>
 
   /** Format tool specs for this provider */
   formatTools: (tools: ToolSpec[]) => unknown[]

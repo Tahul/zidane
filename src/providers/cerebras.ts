@@ -1,13 +1,3 @@
-/**
- * Cerebras provider.
- *
- * OpenAI-compatible API with extremely fast inference.
- * Set CEREBRAS_API_KEY in your environment.
- *
- * Models: qwen-3-32b, llama-4-scout-17b-16e, llama-3.3-70b,
- *         deepseek-r1-distill-llama-70b, gpt-oss-120b, zai-glm-4.7
- */
-
 import type { Provider, StreamCallbacks, StreamOptions, TurnResult } from '.'
 import {
   assistantMessage,
@@ -30,7 +20,7 @@ function getApiKey(): string {
 
 export function cerebras(defaultModel?: string): Provider {
   const apiKey = getApiKey()
-  const fallbackModel = defaultModel || 'qwen-3-32b'
+  const fallbackModel = defaultModel || 'zai-glm-4.7'
 
   return {
     name: 'cerebras',
