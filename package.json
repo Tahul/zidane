@@ -7,7 +7,8 @@
     "auth": "bun run src/auth.ts",
     "start": "bun run src/start.ts",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "bun test"
   },
   "author": "Yaël GUILLOUX <yael.guilloux@gmail.com>",
   "license": "ISC",

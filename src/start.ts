@@ -5,24 +5,27 @@
  */
 
 import type { Harness } from './harnesses'
+import type { ThinkingLevel } from './types'
 import { parseArgs } from 'node:util'
 import { createAgent } from './agent'
 import { setupTerminalOutput } from './output/terminal'
-import { anthropic } from './providers'
+import { anthropic, openrouter } from './providers'
 
 async function main() {
-  const { system, prompt, model, harness } = args()
+  const { system, prompt, model, harness, thinking, provider: providerName } = args()
 
-  const provider = anthropic()
+  const provider = providerName === 'openrouter'
+    ? openrouter(model)
+    : anthropic()
 
   const agent = createAgent({ harness, provider })
 
   await setupTerminalOutput(agent, model, prompt, harness)
 
-  await agent.run({ model, prompt, system })
+  await agent.run({ model, prompt, system, thinking })
 }
 
-function args(): { system: string, prompt: string, model: string, harness: Harness } {
+function args() {
   const { values } = parseArgs({
     args: Bun.argv.slice(2),
     options: {
@@ -30,6 +33,8 @@ function args(): { system: string, prompt: string, model: string, harness: Harne
       model: { type: 'string', short: 'm', default: 'claude-opus-4-6' },
       harness: { type: 'string', short: 't', default: 'basic' },
       system: { type: 'string', short: 's' },
+      thinking: { type: 'string', default: 'off' },
+      provider: { type: 'string', default: 'anthropic' },
     },
     strict: false,
   })
@@ -37,14 +42,16 @@ function args(): { system: string, prompt: string, model: string, harness: Harne
   const system = values.system as string
   const prompt = values.prompt as string
   const model = values.model as string
-  const harness = values.harness as Harness || 'basic'
+  const harness = (values.harness as Harness) || 'basic'
+  const thinking = (values.thinking as ThinkingLevel) || 'off'
+  const provider = values.provider as string || 'anthropic'
 
   if (!prompt || (typeof prompt === 'string' && prompt.trim() === '')) {
     console.error('Usage: bun start --prompt "your message"')
     process.exit(1)
   }
 
-  return { system, prompt, model, harness }
+  return { system, prompt, model, harness, thinking, provider }
 }
 
 main().catch((err) => {
