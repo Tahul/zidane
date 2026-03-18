@@ -1,8 +1,11 @@
 /**
- * OpenRouter provider.
+ * Cerebras provider.
  *
- * Uses the OpenAI-compatible chat completions API.
- * Set OPENROUTER_API_KEY in your environment.
+ * OpenAI-compatible API with extremely fast inference.
+ * Set CEREBRAS_API_KEY in your environment.
+ *
+ * Models: qwen-3-32b, llama-4-scout-17b-16e, llama-3.3-70b,
+ *         deepseek-r1-distill-llama-70b, gpt-oss-120b, zai-glm-4.7
  */
 
 import type { Provider, StreamCallbacks, StreamOptions, TurnResult } from '.'
@@ -16,21 +19,21 @@ import {
   userMessage,
 } from './openai-compat'
 
-const BASE_URL = 'https://openrouter.ai/api/v1'
+const BASE_URL = 'https://api.cerebras.ai/v1'
 
 function getApiKey(): string {
-  if (process.env.OPENROUTER_API_KEY)
-    return process.env.OPENROUTER_API_KEY
+  if (process.env.CEREBRAS_API_KEY)
+    return process.env.CEREBRAS_API_KEY
 
-  throw new Error('No OpenRouter API key found. Set OPENROUTER_API_KEY in your environment.')
+  throw new Error('No Cerebras API key found. Set CEREBRAS_API_KEY in your environment.')
 }
 
-export function openrouter(defaultModel?: string): Provider {
+export function cerebras(defaultModel?: string): Provider {
   const apiKey = getApiKey()
-  const fallbackModel = defaultModel || 'anthropic/claude-sonnet-4'
+  const fallbackModel = defaultModel || 'qwen-3-32b'
 
   return {
-    name: 'openrouter',
+    name: 'cerebras',
     meta: { defaultModel: fallbackModel },
     formatTools,
     userMessage,
@@ -38,13 +41,7 @@ export function openrouter(defaultModel?: string): Provider {
     toolResultsMessage,
 
     async stream(options: StreamOptions, callbacks: StreamCallbacks): Promise<TurnResult> {
-      let modelId = options.model || fallbackModel
-      const thinking = options.thinking ?? 'off'
-
-      // OpenRouter uses :thinking model variant suffix for extended reasoning
-      if (thinking !== 'off' && !modelId.includes(':thinking'))
-        modelId = `${modelId}:thinking`
-
+      const modelId = options.model || fallbackModel
       const messages = toOAIMessages(options.system, options.messages)
 
       const body: Record<string, unknown> = {
@@ -62,8 +59,6 @@ export function openrouter(defaultModel?: string): Provider {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/Tahul/zidane',
-          'X-Title': 'zidane',
         },
         body: JSON.stringify(body),
         signal: options.signal,
@@ -71,7 +66,7 @@ export function openrouter(defaultModel?: string): Provider {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`OpenRouter API error: ${response.status} ${errorText}`)
+        throw new Error(`Cerebras API error: ${response.status} ${errorText}`)
       }
 
       const result = await consumeSSE(response, callbacks, options.signal)

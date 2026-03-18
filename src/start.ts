@@ -9,14 +9,16 @@ import type { ThinkingLevel } from './types'
 import { parseArgs } from 'node:util'
 import { createAgent } from './agent'
 import { setupTerminalOutput } from './output/terminal'
-import { anthropic, openrouter } from './providers'
+import { anthropic, cerebras, openrouter } from './providers'
 
 async function main() {
   const { system, prompt, model, harness, thinking, provider: providerName } = args()
 
   const provider = providerName === 'openrouter'
     ? openrouter(model)
-    : anthropic()
+    : providerName === 'cerebras'
+      ? cerebras(model)
+      : anthropic()
 
   const agent = createAgent({ harness, provider })
 
