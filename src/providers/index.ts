@@ -71,4 +71,5 @@ export interface Provider {
 }
 
 export { anthropic } from './anthropic'
+export { cerebras } from './cerebras'
 export { openrouter } from './openrouter'

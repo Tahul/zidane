@@ -23,7 +23,7 @@ bun start --prompt "create a hello world express app"
 bun start \
   --prompt "your task"    \   # required
   --model claude-opus-4-6 \   # model id (default: claude-opus-4-6)
-  --provider anthropic    \   # anthropic | openrouter
+  --provider anthropic    \   # anthropic | openrouter | cerebras
   --harness basic         \   # tool set to use
   --system "be concise"   \   # system prompt
   --thinking off              # off | minimal | low | medium | high
@@ -53,6 +53,19 @@ OPENROUTER_API_KEY=sk-or-... bun start \
   --model anthropic/claude-sonnet-4 \
   --prompt "hello"
 ```
+
+### Cerebras
+
+Ultra-fast inference on Cerebras wafer-scale hardware.
+
+```bash
+CEREBRAS_API_KEY=csk-... bun start \
+  --provider cerebras \
+  --model qwen-3-32b \
+  --prompt "hello"
+```
+
+Available models: `qwen-3-32b`, `llama-4-scout-17b-16e`, `llama-3.3-70b`, `deepseek-r1-distill-llama-70b`, `gpt-oss-120b`, `zai-glm-4.7`
 
 ## Thinking
 
@@ -252,8 +265,10 @@ src/
     validation.ts       tool argument validation
   providers/
     index.ts            Provider interface
+    openai-compat.ts    shared OpenAI-compatible utilities
     anthropic.ts        Anthropic provider
     openrouter.ts       OpenRouter provider
+    cerebras.ts         Cerebras provider
   harnesses/
     index.ts            harness registry
     basic.ts            shell, read, write, list tools
