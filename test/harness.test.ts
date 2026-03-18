@@ -45,7 +45,7 @@ describe('basic harness', () => {
     })
 
     it('returns error for nonexistent file', async () => {
-      const result = await tools.readFile.execute({ path: '/tmp/zidane-test-nonexistent-file-xyz' })
+      const result = await tools.readFile.execute({ path: 'nonexistent-file-xyz-12345.txt' })
       expect(result).toContain('File not found')
     })
   })
@@ -70,7 +70,7 @@ describe('basic harness', () => {
     })
 
     it('returns error for nonexistent directory', async () => {
-      const result = await tools.listFiles.execute({ path: '/tmp/zidane-nonexistent-dir-xyz' })
+      const result = await tools.listFiles.execute({ path: 'nonexistent-dir-xyz-12345' })
       expect(result).toContain('not found')
     })
   })
