@@ -9,12 +9,14 @@ import type { ThinkingLevel } from './types'
 import { parseArgs } from 'node:util'
 import { createAgent } from './agent'
 import { setupTerminalOutput } from './output/terminal'
-import { anthropic } from './providers'
+import { anthropic, openrouter } from './providers'
 
 async function main() {
-  const { system, prompt, model, harness, thinking } = args()
+  const { system, prompt, model, harness, thinking, provider: providerName } = args()
 
-  const provider = anthropic()
+  const provider = providerName === 'openrouter'
+    ? openrouter(model)
+    : anthropic()
 
   const agent = createAgent({ harness, provider })
 
@@ -32,6 +34,7 @@ function args() {
       harness: { type: 'string', short: 't', default: 'basic' },
       system: { type: 'string', short: 's' },
       thinking: { type: 'string', default: 'off' },
+      provider: { type: 'string', default: 'anthropic' },
     },
     strict: false,
   })
@@ -41,13 +44,14 @@ function args() {
   const model = values.model as string
   const harness = (values.harness as Harness) || 'basic'
   const thinking = (values.thinking as ThinkingLevel) || 'off'
+  const provider = values.provider as string || 'anthropic'
 
   if (!prompt || (typeof prompt === 'string' && prompt.trim() === '')) {
     console.error('Usage: bun start --prompt "your message"')
     process.exit(1)
   }
 
-  return { system, prompt, model, harness, thinking }
+  return { system, prompt, model, harness, thinking, provider }
 }
 
 main().catch((err) => {

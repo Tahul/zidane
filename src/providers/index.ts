@@ -71,3 +71,4 @@ export interface Provider {
 }
 
 export { anthropic } from './anthropic'
+export { openrouter } from './openrouter'
