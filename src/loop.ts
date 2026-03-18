@@ -36,6 +36,7 @@ export async function runLoop(ctx: LoopContext): Promise<AgentStats> {
 
   for (let turn = 0; turn < maxTurns; turn++) {
     if (ctx.signal.aborted) {
+      await ctx.hooks.callHook('agent:abort', {})
       break
     }
 
@@ -43,6 +44,20 @@ export async function runLoop(ctx: LoopContext): Promise<AgentStats> {
 
     totalIn += result.usage.input
     totalOut += result.usage.output
+
+    // Check abort after turn completes
+    if (ctx.signal.aborted) {
+      await ctx.hooks.callHook('agent:abort', {})
+      break
+    }
+
+    // Check steering queue after tool execution
+    if (ctx.steeringQueue.length > 0) {
+      const steerMsg = ctx.steeringQueue.shift()!
+      await ctx.hooks.callHook('steer:inject', { message: steerMsg })
+      ctx.messages.push(ctx.provider.userMessage(steerMsg))
+      continue
+    }
 
     if (result.ended) {
       // Check follow-up queue before finishing

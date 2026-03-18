@@ -130,9 +130,8 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
       return stats
     }
     catch (err: any) {
-      // If aborted, return what we have
+      // If aborted, provider may throw — return gracefully
       if (abortController.signal.aborted) {
-        await hooks.callHook('agent:abort', {})
         const stats: AgentStats = { totalIn: 0, totalOut: 0, turns: 0, elapsed: 0 }
         await hooks.callHook('agent:done', stats)
         return stats
