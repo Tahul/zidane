@@ -256,9 +256,27 @@ describe('provider factories', () => {
 
 describe('provider interface contract', () => {
   const providers = [
-    { name: 'cerebras', factory: () => { process.env.CEREBRAS_API_KEY = 'test'; return cerebras() } },
-    { name: 'openrouter', factory: () => { process.env.OPENROUTER_API_KEY = 'test'; return openrouter() } },
-    { name: 'anthropic', factory: () => { process.env.ANTHROPIC_API_KEY = 'sk-ant-test'; return anthropic() } },
+    {
+      name: 'cerebras',
+      factory: () => {
+        process.env.CEREBRAS_API_KEY = 'test'
+        return cerebras()
+      },
+    },
+    {
+      name: 'openrouter',
+      factory: () => {
+        process.env.OPENROUTER_API_KEY = 'test'
+        return openrouter()
+      },
+    },
+    {
+      name: 'anthropic',
+      factory: () => {
+        process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+        return anthropic()
+      },
+    },
   ]
 
   for (const { name, factory } of providers) {

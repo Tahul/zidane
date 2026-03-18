@@ -1,18 +1,18 @@
+import type { ToolSpec } from '../src/providers'
+import type { ImageContent } from '../src/types'
 import { describe, expect, it } from 'bun:test'
 import {
   ASSISTANT_TOOL_CALLS_TAG,
-  TOOL_RESULTS_TAG,
   assistantMessage,
   buildAssistantContent,
-  convertImageContent,
   consumeSSE,
+  convertImageContent,
   formatTools,
   toOAIMessages,
+  TOOL_RESULTS_TAG,
   toolResultsMessage,
   userMessage,
 } from '../src/providers/openai-compat'
-import type { ToolSpec } from '../src/providers'
-import type { ImageContent } from '../src/types'
 
 // ---------------------------------------------------------------------------
 // convertImageContent
@@ -344,7 +344,7 @@ describe('toOAIMessages', () => {
 
 describe('consumeSSE', () => {
   function makeSSEResponse(lines: string[]): Response {
-    const text = lines.join('\n') + '\n'
+    const text = `${lines.join('\n')}\n`
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       start(controller) {
