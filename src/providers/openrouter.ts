@@ -215,7 +215,13 @@ export function openrouter(defaultModel?: string): Provider {
     },
 
     async stream(options: StreamOptions, callbacks: StreamCallbacks): Promise<TurnResult> {
-      const modelId = options.model || fallbackModel
+      let modelId = options.model || fallbackModel
+      const thinking = options.thinking ?? 'off'
+
+      // OpenRouter uses :thinking model variant suffix for extended reasoning
+      if (thinking !== 'off' && !modelId.includes(':thinking'))
+        modelId = `${modelId}:thinking`
+
       const messages = toOAIMessages(options.system, options.messages)
 
       const body: Record<string, unknown> = {
