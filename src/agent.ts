@@ -1,15 +1,18 @@
+/**
+ * Agent creation and state management.
+ */
+
 import type { Hookable } from 'hookable'
 import type { Harness } from './harnesses'
-import type { Provider, StreamOptions, ToolSpec } from './providers'
+import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
+import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
 import { createHooks } from 'hookable'
 import { harnesses } from './harnesses'
+import { runLoop } from './loop'
 
-const MAX_TURNS = 50
-
-export interface AgentOptions {
-  harness: Harness
-  provider: Provider
-}
+// ---------------------------------------------------------------------------
+// Hook definitions
+// ---------------------------------------------------------------------------
 
 export interface AgentHooks {
   'system:before': (ctx: { system: string }) => void
@@ -20,26 +23,72 @@ export interface AgentHooks {
   'tool:before': (ctx: { name: string, input: Record<string, unknown> }) => void
   'tool:after': (ctx: { name: string, input: Record<string, unknown>, result: string }) => void
   'tool:error': (ctx: { name: string, input: Record<string, unknown>, error: Error }) => void
-  'agent:done': (ctx: { totalIn: number, totalOut: number, turns: number, elapsed: number }) => void
+  /** Mutate ctx.block / ctx.reason to block tool execution */
+  'tool:gate': (ctx: { name: string, input: Record<string, unknown>, block: boolean, reason: string }) => void
+  /** Mutate ctx.result / ctx.isError to transform tool output */
+  'tool:transform': (ctx: { name: string, input: Record<string, unknown>, result: string, isError: boolean }) => void
+  'context:transform': (ctx: { messages: Message[] }) => void
+  'steer:inject': (ctx: { message: string }) => void
+  'agent:abort': (ctx: object) => void
+  'agent:done': (ctx: AgentStats) => void
 }
 
-export interface AgentRunOptions {
-  model?: string
-  prompt: string
-  system?: string
+// ---------------------------------------------------------------------------
+// Agent interface
+// ---------------------------------------------------------------------------
+
+export interface AgentOptions {
+  harness: Harness
+  provider: Provider
+  /** Tool execution mode: 'sequential' (default) or 'parallel' */
+  toolExecution?: ToolExecutionMode
 }
 
 export interface Agent {
   hooks: Hookable<AgentHooks>
-  run: (options: AgentRunOptions) => Promise<{ totalIn: number, totalOut: number, turns: number, elapsed: number }>
+  run: (options: AgentRunOptions) => Promise<AgentStats>
+  abort: () => void
+  steer: (message: string) => void
+  followUp: (message: string) => void
+  waitForIdle: () => Promise<void>
+  reset: () => void
+  readonly isRunning: boolean
+  readonly messages: Message[]
   meta: Record<string, unknown>
 }
 
-export function createAgent({ harness, provider }: AgentOptions) {
+// ---------------------------------------------------------------------------
+// createAgent
+// ---------------------------------------------------------------------------
+
+export function createAgent({ harness, provider, toolExecution = 'sequential' }: AgentOptions): Agent {
   const hooks = createHooks<AgentHooks>()
 
-  async function run({ model, prompt, system }: AgentRunOptions) {
-    const toolSpecs: ToolSpec[] = Object.values(harnesses[harness]).map(
+  let abortController: AbortController | undefined
+  let running = false
+  let idleResolve: (() => void) | undefined
+  let idlePromise: Promise<void> | undefined
+  const steeringQueue: string[] = []
+  const followUpQueue: string[] = []
+  let conversationMessages: Message[] = []
+
+  async function run(options: AgentRunOptions): Promise<AgentStats> {
+    if (running) {
+      throw new Error('Agent is already running. Use steer() or followUp() to queue messages, or waitForIdle().')
+    }
+
+    running = true
+    abortController = new AbortController()
+    idlePromise = new Promise<void>((resolve) => {
+      idleResolve = resolve
+    })
+
+    const thinking = options.thinking ?? 'off'
+    const model = options.model || 'claude-opus-4-6'
+    const system = options.system || 'You are a helpful assistant.'
+
+    const tools = harnesses[harness]
+    const toolSpecs: ToolSpec[] = Object.values(tools).map(
       t => ({
         name: t.spec.name,
         description: t.spec.description || '',
@@ -48,100 +97,91 @@ export function createAgent({ harness, provider }: AgentOptions) {
     )
     const formattedTools = provider.formatTools(toolSpecs)
 
-    const messages = [] as ReturnType<Provider['userMessage']>[]
+    // Build initial messages
+    const messages: Message[] = []
 
-    if (system) {
-      await hooks.callHook('system:before', { system })
-      messages.push(provider.userMessage(system))
+    if (options.system) {
+      await hooks.callHook('system:before', { system: options.system })
+      messages.push(provider.userMessage(options.system))
       messages.push(provider.assistantMessage('Understood. I will proceed with these instructions above the rest of my system prompt.'))
     }
 
-    messages.push(provider.userMessage(prompt))
+    messages.push(provider.userMessage(options.prompt, options.images))
+    conversationMessages = messages
 
-    let totalIn = 0
-    let totalOut = 0
-    const startTime = Date.now()
-
-    async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
-      const toolDef = harnesses[harness][name]
-
-      if (!toolDef) {
-        const err = new Error(`Unknown tool: ${name}`)
-        await hooks.callHook('tool:error', { name, input, error: err })
-        return `Tool error: ${err.message}`
-      }
-
-      try {
-        return await toolDef.execute(input)
-      }
-      catch (err: any) {
-        await hooks.callHook('tool:error', { name, input, error: err })
-        return `Tool error: ${err.message}`
-      }
-    }
-
-    async function executeTurn(turn: number): Promise<boolean> {
-      const streamOptions: StreamOptions = {
-        model: model || 'claude-opus-4-6',
-        system: system || 'You are a helpful assistant.',
-        tools: formattedTools,
+    try {
+      const stats = await runLoop({
+        provider,
+        hooks,
+        tools,
+        toolSpecs,
+        formattedTools,
+        model,
+        system,
+        thinking,
+        toolExecution,
+        signal: abortController.signal,
+        steeringQueue,
+        followUpQueue,
         messages,
-        maxTokens: 16384,
-      }
+      })
 
-      await hooks.callHook('turn:before', { turn, options: streamOptions })
-
-      let currentText = ''
-
-      const result = await provider.stream(
-        streamOptions,
-        {
-          onText(delta) {
-            currentText += delta
-            hooks.callHook('stream:text', { delta, text: currentText })
-          },
-        },
-      )
-
-      if (currentText) {
-        await hooks.callHook('stream:end', { text: currentText })
-      }
-
-      totalIn += result.usage.input
-      totalOut += result.usage.output
-
-      await hooks.callHook('turn:after', { turn, usage: result.usage })
-
-      if (result.done) {
-        const stats = { totalIn, totalOut, turns: turn + 1, elapsed: Date.now() - startTime }
+      await hooks.callHook('agent:done', stats)
+      return stats
+    }
+    catch (err: any) {
+      // If aborted, return what we have
+      if (abortController.signal.aborted) {
+        await hooks.callHook('agent:abort', {})
+        const stats: AgentStats = { totalIn: 0, totalOut: 0, turns: 0, elapsed: 0 }
         await hooks.callHook('agent:done', stats)
-        return true
+        return stats
       }
-
-      messages.push({ role: 'assistant', content: result.assistantMessage })
-
-      const toolResults = []
-      for (const call of result.toolCalls) {
-        await hooks.callHook('tool:before', { name: call.name, input: call.input })
-        const output = await executeTool(call.name, call.input)
-        await hooks.callHook('tool:after', { name: call.name, input: call.input, result: output })
-        toolResults.push({ id: call.id, content: output })
-      }
-
-      messages.push(provider.toolResultsMessage(toolResults))
-      return false
+      throw err
     }
-
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const ended = await executeTurn(turn)
-      if (ended)
-        return { totalIn, totalOut, turns: turn + 1 }
+    finally {
+      running = false
+      abortController = undefined
+      steeringQueue.length = 0
+      followUpQueue.length = 0
+      idleResolve?.()
+      idlePromise = undefined
+      idleResolve = undefined
     }
-
-    const stats = { totalIn, totalOut, turns: MAX_TURNS, elapsed: Date.now() - startTime }
-    await hooks.callHook('agent:done', stats)
-    return stats
   }
 
-  return { hooks, run, meta: provider.meta }
+  function abort() {
+    abortController?.abort()
+  }
+
+  function steer(message: string) {
+    steeringQueue.push(message)
+  }
+
+  function followUpFn(message: string) {
+    followUpQueue.push(message)
+  }
+
+  function waitForIdle(): Promise<void> {
+    return idlePromise ?? Promise.resolve()
+  }
+
+  function reset() {
+    conversationMessages = []
+    steeringQueue.length = 0
+    followUpQueue.length = 0
+  }
+
+  return {
+    hooks,
+    run,
+    abort,
+    steer,
+    followUp: followUpFn,
+    waitForIdle,
+    reset,
+    get isRunning() { return running },
+    get messages() { return conversationMessages },
+    meta: provider.meta,
+  }
 }

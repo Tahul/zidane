@@ -1,3 +1,5 @@
+import type { ImageContent, ThinkingLevel } from '../types'
+
 export interface ToolSpec {
   name: string
   description: string
@@ -13,14 +15,6 @@ export interface ToolCall {
 export interface ToolResult {
   id: string
   content: string
-}
-
-export interface TurnOptions {
-  model: string
-  system: string
-  tools: unknown[]
-  messages: Message[]
-  maxTokens: number
 }
 
 export interface Message {
@@ -50,6 +44,10 @@ export interface StreamOptions {
   tools: unknown[]
   messages: Message[]
   maxTokens: number
+  /** Thinking/reasoning level (optional, default: off) */
+  thinking?: ThinkingLevel
+  /** Abort signal for cancellation */
+  signal?: AbortSignal
 }
 
 export interface Provider {
@@ -59,8 +57,8 @@ export interface Provider {
   /** Format tool specs for this provider */
   formatTools: (tools: ToolSpec[]) => unknown[]
 
-  /** Create an initial user message */
-  userMessage: (content: string) => Message
+  /** Create a user message (text or with images) */
+  userMessage: (content: string, images?: ImageContent[]) => Message
 
   /** Create an assistant message (for priming) */
   assistantMessage: (content: string) => Message
@@ -69,7 +67,7 @@ export interface Provider {
   toolResultsMessage: (results: ToolResult[]) => Message
 
   /** Stream a turn, calling onText for each text delta */
-  stream: (options: TurnOptions, callbacks: StreamCallbacks) => Promise<TurnResult>
+  stream: (options: StreamOptions, callbacks: StreamCallbacks) => Promise<TurnResult>
 }
 
 export { anthropic } from './anthropic'
