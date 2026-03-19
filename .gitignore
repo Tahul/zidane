@@ -3,3 +3,4 @@ node_modules/
 .credentials.json
 bun.lock
 tsconfig.tsbuildinfo
+dist
