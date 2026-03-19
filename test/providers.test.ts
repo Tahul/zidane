@@ -137,7 +137,7 @@ describe('provider factories', () => {
       try {
         const provider = cerebras()
         expect(provider.name).toBe('cerebras')
-        expect(provider.meta.defaultModel).toBe('qwen-3-32b')
+        expect(provider.meta.defaultModel).toBe('zai-glm-4.7')
       }
       finally {
         if (original !== undefined)
@@ -150,8 +150,8 @@ describe('provider factories', () => {
       const original = process.env.CEREBRAS_API_KEY
       process.env.CEREBRAS_API_KEY = 'test-key'
       try {
-        const provider = cerebras('llama-3.3-70b')
-        expect(provider.meta.defaultModel).toBe('llama-3.3-70b')
+        const provider = cerebras('gpt-oss-120b')
+        expect(provider.meta.defaultModel).toBe('gpt-oss-120b')
       }
       finally {
         if (original !== undefined)
@@ -210,7 +210,7 @@ describe('provider factories', () => {
       try {
         const provider = openrouter()
         expect(provider.name).toBe('openrouter')
-        expect(provider.meta.defaultModel).toBe('anthropic/claude-sonnet-4')
+        expect(provider.meta.defaultModel).toBe('anthropic/claude-sonnet-4-6')
       }
       finally {
         if (original !== undefined)

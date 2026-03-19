@@ -8,14 +8,14 @@ import Anthropic from '@anthropic-ai/sdk'
 const CREDENTIALS_FILE = resolve(import.meta.dir, '../../.credentials.json')
 
 function getApiKey(): string {
+  if (process.env.ANTHROPIC_API_KEY)
+    return process.env.ANTHROPIC_API_KEY
+
   if (existsSync(CREDENTIALS_FILE)) {
     const creds = JSON.parse(readFileSync(CREDENTIALS_FILE, 'utf-8'))
     if (creds.anthropic?.access)
       return creds.anthropic.access
   }
-
-  if (process.env.ANTHROPIC_API_KEY)
-    return process.env.ANTHROPIC_API_KEY
 
   throw new Error('No API key found. Run `bun run auth` first.')
 }

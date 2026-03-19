@@ -50,7 +50,7 @@ Access 200+ models through OpenRouter's unified API.
 ```bash
 OPENROUTER_API_KEY=sk-or-... bun start \
   --provider openrouter \
-  --model anthropic/claude-sonnet-4 \
+  --model anthropic/claude-sonnet-4-6 \
   --prompt "hello"
 ```
 
@@ -61,11 +61,11 @@ Ultra-fast inference on Cerebras wafer-scale hardware.
 ```bash
 CEREBRAS_API_KEY=csk-... bun start \
   --provider cerebras \
-  --model qwen-3-32b \
+  --model zai-glm-4.7 \
   --prompt "hello"
 ```
 
-Available models: `qwen-3-32b`, `llama-4-scout-17b-16e`, `llama-3.3-70b`, `deepseek-r1-distill-llama-70b`, `gpt-oss-120b`, `zai-glm-4.7`
+Available models: `zai-glm-4.7`, `gpt-oss-120b`
 
 ## Thinking
 
