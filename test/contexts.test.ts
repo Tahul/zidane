@@ -251,22 +251,22 @@ describe('Agent with execution context', () => {
     const provider = createMockProvider([{ text: 'hello', done: true }])
     const agent = createAgent({ harness: basic, provider })
 
-    expect(agent.context.type).toBe('process')
+    expect(agent.execution.type).toBe('process')
   })
 
   it('uses provided context', async () => {
     const mockCtx = createMockContext()
     const provider = createMockProvider([{ text: 'hello', done: true }])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
-    expect(agent.context.type).toBe('process')
-    expect(agent.context).toBe(mockCtx)
+    expect(agent.execution.type).toBe('process')
+    expect(agent.execution).toBe(mockCtx)
   })
 
   it('spawns context handle on first run', async () => {
     const mockCtx = createMockContext()
     const provider = createMockProvider([{ text: 'hello', done: true }])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     expect(agent.handle).toBeNull()
 
@@ -283,7 +283,7 @@ describe('Agent with execution context', () => {
       { text: 'first', done: true },
       { text: 'second', done: true },
     ])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     await agent.run({ prompt: 'first' })
     const firstHandle = agent.handle
@@ -301,12 +301,12 @@ describe('Agent with execution context', () => {
       execHandler: () => ({ stdout: 'mock output', stderr: '', exitCode: 0 }),
     })
     const provider = createMockProvider([{ text: 'done', done: true }])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     await agent.run({ prompt: 'hi' })
 
-    // Tools could access agent.context and agent.handle
-    const result = await agent.context.exec(agent.handle!, 'test command')
+    // Tools could access agent.execution and agent.handle
+    const result = await agent.execution.exec(agent.handle!, 'test command')
     expect(result.stdout).toBe('mock output')
   })
 })
@@ -319,7 +319,7 @@ describe('Agent destroy', () => {
   it('destroys the execution context handle', async () => {
     const mockCtx = createMockContext()
     const provider = createMockProvider([{ text: 'hello', done: true }])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     await agent.run({ prompt: 'hi' })
     expect(agent.handle).not.toBeNull()
@@ -332,7 +332,7 @@ describe('Agent destroy', () => {
   it('is safe to call destroy without a handle', async () => {
     const mockCtx = createMockContext()
     const provider = createMockProvider([{ text: 'hello', done: true }])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     // Never called run, so no handle
     await agent.destroy()
@@ -345,7 +345,7 @@ describe('Agent destroy', () => {
       { text: 'first', done: true },
       { text: 'second', done: true },
     ])
-    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+    const agent = createAgent({ harness: basic, provider, execution: mockCtx })
 
     await agent.run({ prompt: 'first' })
     const firstId = agent.handle!.id

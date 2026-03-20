@@ -3,8 +3,8 @@
  */
 
 import type { Hookable } from 'hookable'
-import type { ExecutionContext, ExecutionHandle } from './contexts'
 
+import type { ExecutionContext, ExecutionHandle } from './contexts'
 import type { HarnessConfig } from './harnesses'
 import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
@@ -43,9 +43,7 @@ export interface AgentOptions {
   /** Tool execution mode: 'sequential' (default) or 'parallel' */
   toolExecution?: ToolExecutionMode
   /** Execution context: where tools run. Defaults to in-process. */
-  context?: ExecutionContext
-  /** Configuration passed to context.spawn() on first run */
-  spawnConfig?: import('./contexts').SpawnConfig
+  execution?: ExecutionContext
 }
 
 export interface Agent {
@@ -60,7 +58,7 @@ export interface Agent {
   destroy: () => Promise<void>
   readonly isRunning: boolean
   readonly messages: Message[]
-  readonly context: ExecutionContext
+  readonly execution: ExecutionContext
   readonly handle: ExecutionHandle | null
   meta: Record<string, unknown>
 }
@@ -69,9 +67,9 @@ export interface Agent {
 // createAgent
 // ---------------------------------------------------------------------------
 
-export function createAgent({ harness, provider, toolExecution = 'sequential', context, spawnConfig }: AgentOptions): Agent {
+export function createAgent({ harness, provider, toolExecution = 'sequential', execution }: AgentOptions): Agent {
   const hooks = createHooks<AgentHooks>()
-  const executionContext = context ?? createProcessContext()
+  const executionContext = execution ?? createProcessContext()
 
   let abortController: AbortController | undefined
   let running = false
@@ -95,7 +93,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', c
 
     // Spawn execution context
     if (!executionHandle) {
-      executionHandle = await executionContext.spawn(spawnConfig)
+      executionHandle = await executionContext.spawn()
     }
 
     const thinking = options.thinking ?? 'off'
@@ -206,7 +204,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', c
     destroy,
     get isRunning() { return running },
     get messages() { return conversationMessages },
-    get context() { return executionContext },
+    get execution() { return executionContext },
     get handle() { return executionHandle },
     meta: provider.meta,
   }

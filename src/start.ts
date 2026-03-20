@@ -34,17 +34,16 @@ async function main() {
     process.exit(1)
   }
 
-  const executionContext = createContext(context)
+  const execution = createExecution(context, { image, cwd })
 
   const agent = createAgent({
     harness: harnessConfig,
     provider: providers[providerName as keyof typeof providers],
-    context: executionContext,
-    spawnConfig: { image, cwd },
+    execution,
   })
 
   if (context !== 'process') {
-    console.log(`🔧 Execution context: ${context}${image ? ` (${image})` : ''}${cwd ? ` in ${cwd}` : ''}`)
+    console.log(`🔧 Execution: ${context}${image ? ` (${image})` : ''}${cwd ? ` in ${cwd}` : ''}`)
   }
 
   await setupTerminalOutput(agent, model, prompt, harnessConfig)
@@ -57,13 +56,13 @@ async function main() {
   }
 }
 
-function createContext(type: string): ExecutionContext {
+function createExecution(type: string, opts: { image?: string, cwd?: string }): ExecutionContext {
   switch (type) {
     case 'docker':
-      return createDockerContext()
+      return createDockerContext({ image: opts.image, cwd: opts.cwd })
     case 'process':
     default:
-      return createProcessContext()
+      return createProcessContext({ cwd: opts.cwd })
   }
 }
 

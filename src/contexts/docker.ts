@@ -17,9 +17,13 @@ interface ContainerRef {
   docker: any
 }
 
-export function createDockerContext(): ExecutionContext {
+export function createDockerContext(config?: SpawnConfig): ExecutionContext {
   let counter = 0
   const containers = new Map<string, ContainerRef>()
+  const defaultImage = config?.image ?? 'oven/bun:latest'
+  const defaultCwd = config?.cwd ?? '/workspace'
+  const defaultEnv = config?.env
+  const defaultLimits = config?.limits
 
   async function getDockerode() {
     try {
@@ -41,11 +45,11 @@ export function createDockerContext(): ExecutionContext {
       gpu: false,
     } satisfies ContextCapabilities,
 
-    async spawn(config?: SpawnConfig): Promise<ExecutionHandle> {
+    async spawn(overrides?: SpawnConfig): Promise<ExecutionHandle> {
       const docker = await getDockerode()
       const id = `docker-${++counter}`
-      const image = config?.image ?? 'oven/bun:latest'
-      const cwd = config?.cwd ?? '/workspace'
+      const image = overrides?.image ?? defaultImage
+      const cwd = overrides?.cwd ?? defaultCwd
 
       // Pull image if not available
       try {
@@ -63,22 +67,23 @@ export function createDockerContext(): ExecutionContext {
         })
       }
 
+      const limits = { ...defaultLimits, ...overrides?.limits }
       const hostConfig: Record<string, unknown> = {}
 
-      if (config?.limits?.memory) {
-        hostConfig.Memory = config.limits.memory * 1024 * 1024
+      if (limits?.memory) {
+        hostConfig.Memory = limits.memory * 1024 * 1024
       }
-      if (config?.limits?.cpu) {
-        hostConfig.NanoCpus = Number.parseFloat(config.limits.cpu) * 1e9
+      if (limits?.cpu) {
+        hostConfig.NanoCpus = Number.parseFloat(limits.cpu) * 1e9
       }
+
+      const env = { ...defaultEnv, ...overrides?.env }
 
       const container = await docker.createContainer({
         Image: image,
         Cmd: ['sleep', 'infinity'],
         WorkingDir: cwd,
-        Env: config?.env
-          ? Object.entries(config.env).map(([k, v]) => `${k}=${v}`)
-          : [],
+        Env: Object.entries(env).map(([k, v]) => `${k}=${v}`),
         HostConfig: hostConfig,
       })
 
@@ -113,7 +118,7 @@ export function createDockerContext(): ExecutionContext {
         let stdout = ''
         const stderr = ''
 
-        const timeout = options?.timeout ?? 30
+        const timeout = options?.timeout ?? defaultLimits?.timeout ?? 30
         const timer = setTimeout(() => {
           resolve({ stdout, stderr: `${stderr}\n[timeout]`, exitCode: 124 })
         }, timeout * 1000)

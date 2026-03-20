@@ -9,14 +9,15 @@ import type { ContextCapabilities, ExecResult, ExecutionContext, ExecutionHandle
 import { exec as execCb } from 'node:child_process'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-
 import { promisify } from 'node:util'
 
 const execAsync = promisify(execCb)
 
-export function createProcessContext(): ExecutionContext {
+export function createProcessContext(config?: SpawnConfig): ExecutionContext {
   let counter = 0
   const handles = new Map<string, ExecutionHandle>()
+  const defaultCwd = config?.cwd ?? process.cwd()
+  const defaultEnv = config?.env
 
   return {
     type: 'process',
@@ -28,9 +29,9 @@ export function createProcessContext(): ExecutionContext {
       gpu: false,
     } satisfies ContextCapabilities,
 
-    async spawn(config?: SpawnConfig): Promise<ExecutionHandle> {
+    async spawn(overrides?: SpawnConfig): Promise<ExecutionHandle> {
       const id = `process-${++counter}`
-      const cwd = config?.cwd ?? process.cwd()
+      const cwd = overrides?.cwd ?? defaultCwd
 
       await mkdir(cwd, { recursive: true })
 
@@ -45,8 +46,8 @@ export function createProcessContext(): ExecutionContext {
       try {
         const { stdout, stderr } = await execAsync(command, {
           cwd,
-          env: options?.env ? { ...process.env, ...options.env } : process.env,
-          timeout: (options?.timeout ?? 30) * 1000,
+          env: { ...process.env, ...defaultEnv, ...options?.env },
+          timeout: (options?.timeout ?? config?.limits?.timeout ?? 30) * 1000,
           maxBuffer: 10 * 1024 * 1024,
         })
         return { stdout, stderr, exitCode: 0 }
