@@ -5,11 +5,12 @@
  * No isolation — fastest, used as the default.
  */
 
-import { exec as execCb } from 'node:child_process'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { promisify } from 'node:util'
 import type { ContextCapabilities, ExecResult, ExecutionContext, ExecutionHandle, SpawnConfig } from './types'
+import { exec as execCb } from 'node:child_process'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+
+import { promisify } from 'node:util'
 
 const execAsync = promisify(execCb)
 

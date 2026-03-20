@@ -86,20 +86,20 @@ export interface ExecutionContext {
   readonly capabilities: ContextCapabilities
 
   /** Spawn a new execution environment */
-  spawn(config?: SpawnConfig): Promise<ExecutionHandle>
+  spawn: (config?: SpawnConfig) => Promise<ExecutionHandle>
 
   /** Execute a shell command in the context */
-  exec(handle: ExecutionHandle, command: string, options?: { cwd?: string, env?: Record<string, string>, timeout?: number }): Promise<ExecResult>
+  exec: (handle: ExecutionHandle, command: string, options?: { cwd?: string, env?: Record<string, string>, timeout?: number }) => Promise<ExecResult>
 
   /** Read a file from the context's filesystem */
-  readFile(handle: ExecutionHandle, path: string): Promise<string>
+  readFile: (handle: ExecutionHandle, path: string) => Promise<string>
 
   /** Write a file to the context's filesystem */
-  writeFile(handle: ExecutionHandle, path: string, content: string): Promise<void>
+  writeFile: (handle: ExecutionHandle, path: string, content: string) => Promise<void>
 
   /** List files in a directory */
-  listFiles(handle: ExecutionHandle, path: string): Promise<string[]>
+  listFiles: (handle: ExecutionHandle, path: string) => Promise<string[]>
 
   /** Destroy the execution environment and clean up resources */
-  destroy(handle: ExecutionHandle): Promise<void>
+  destroy: (handle: ExecutionHandle) => Promise<void>
 }

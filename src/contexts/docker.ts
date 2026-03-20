@@ -7,14 +7,18 @@
  * Requires `dockerode` as an optional peer dependency.
  */
 
+import type { Buffer } from 'node:buffer'
+
 import type { ContextCapabilities, ExecResult, ExecutionContext, ExecutionHandle, SpawnConfig } from './types'
+
+const SINGLE_QUOTE_RE = /'/g
 
 let counter = 0
 
 interface ContainerRef {
   handle: ExecutionHandle
-  container: any // Dockerode.Container
-  docker: any // Dockerode instance
+  container: any
+  docker: any
 }
 
 export function createDockerContext(): ExecutionContext {
@@ -30,7 +34,7 @@ export function createDockerContext(): ExecutionContext {
     }
   }
 
-  return {
+  const ctx: ExecutionContext = {
     type: 'docker',
 
     capabilities: {
@@ -53,7 +57,8 @@ export function createDockerContext(): ExecutionContext {
       catch {
         await new Promise<void>((resolve, reject) => {
           docker.pull(image, (err: Error | null, stream: NodeJS.ReadableStream) => {
-            if (err) return reject(err)
+            if (err)
+              return reject(err)
             docker.modem.followProgress(stream, (err2: Error | null) => {
               err2 ? reject(err2) : resolve()
             })
@@ -89,7 +94,8 @@ export function createDockerContext(): ExecutionContext {
 
     async exec(handle: ExecutionHandle, command: string, options?: { cwd?: string, env?: Record<string, string>, timeout?: number }): Promise<ExecResult> {
       const ref = containers.get(handle.id)
-      if (!ref) throw new Error(`Container ${handle.id} not found`)
+      if (!ref)
+        throw new Error(`Container ${handle.id} not found`)
 
       const execCwd = options?.cwd ?? handle.cwd
       const env = options?.env
@@ -108,18 +114,15 @@ export function createDockerContext(): ExecutionContext {
 
       return new Promise<ExecResult>((resolve) => {
         let stdout = ''
-        let stderr = ''
+        const stderr = ''
 
         const timeout = options?.timeout ?? 30
         const timer = setTimeout(() => {
-          resolve({ stdout, stderr: stderr + '\n[timeout]', exitCode: 124 })
+          resolve({ stdout, stderr: `${stderr}\n[timeout]`, exitCode: 124 })
         }, timeout * 1000)
 
         stream.on('data', (chunk: Buffer) => {
-          // Docker multiplexes stdout/stderr in the stream
-          // First 8 bytes are header: [stream_type, 0, 0, 0, size(4 bytes)]
-          const text = chunk.toString('utf-8')
-          stdout += text
+          stdout += chunk.toString('utf-8')
         })
 
         stream.on('end', async () => {
@@ -131,26 +134,30 @@ export function createDockerContext(): ExecutionContext {
     },
 
     async readFile(handle: ExecutionHandle, path: string): Promise<string> {
-      const result = await this.exec(handle, `cat ${JSON.stringify(path)}`)
-      if (result.exitCode !== 0) throw new Error(`Failed to read file: ${result.stderr}`)
+      const result = await ctx.exec(handle, `cat ${JSON.stringify(path)}`)
+      if (result.exitCode !== 0)
+        throw new Error(`Failed to read file: ${result.stderr}`)
       return result.stdout
     },
 
     async writeFile(handle: ExecutionHandle, path: string, content: string): Promise<void> {
-      const escaped = content.replace(/'/g, `'\\''`)
-      const result = await this.exec(handle, `mkdir -p "$(dirname ${JSON.stringify(path)})" && printf '%s' '${escaped}' > ${JSON.stringify(path)}`)
-      if (result.exitCode !== 0) throw new Error(`Failed to write file: ${result.stderr}`)
+      const escaped = content.replace(SINGLE_QUOTE_RE, String.raw`'\''`)
+      const result = await ctx.exec(handle, `mkdir -p "$(dirname ${JSON.stringify(path)})" && printf '%s' '${escaped}' > ${JSON.stringify(path)}`)
+      if (result.exitCode !== 0)
+        throw new Error(`Failed to write file: ${result.stderr}`)
     },
 
     async listFiles(handle: ExecutionHandle, path: string): Promise<string[]> {
-      const result = await this.exec(handle, `ls -1 ${JSON.stringify(path)}`)
-      if (result.exitCode !== 0) return []
+      const result = await ctx.exec(handle, `ls -1 ${JSON.stringify(path)}`)
+      if (result.exitCode !== 0)
+        return []
       return result.stdout.trim().split('\n').filter(Boolean)
     },
 
     async destroy(handle: ExecutionHandle): Promise<void> {
       const ref = containers.get(handle.id)
-      if (!ref) return
+      if (!ref)
+        return
 
       try {
         await ref.container.stop({ t: 5 })
@@ -163,4 +170,6 @@ export function createDockerContext(): ExecutionContext {
       containers.delete(handle.id)
     },
   }
+
+  return ctx
 }
