@@ -1,5 +1,7 @@
 export { createAgent } from './agent'
 export type { Agent, AgentHooks, AgentOptions } from './agent'
+export { createDockerContext, createProcessContext, createSandboxContext } from './contexts'
+export type { ContextCapabilities, ContextType, ExecResult, ExecutionContext, ExecutionHandle, SandboxProvider, SpawnConfig } from './contexts'
 export { defineHarness } from './harnesses'
 export type { Harness, HarnessConfig, ToolDef, ToolMap } from './harnesses'
 export type { AgentRunOptions, AgentStats, ContentBlock, ImageContent, ThinkingLevel, ToolExecutionMode } from './types'

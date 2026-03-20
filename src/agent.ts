@@ -3,10 +3,13 @@
  */
 
 import type { Hookable } from 'hookable'
+
+import type { ExecutionContext, ExecutionHandle } from './contexts'
 import type { HarnessConfig } from './harnesses'
 import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
 import { createHooks } from 'hookable'
+import { createProcessContext } from './contexts'
 import { runLoop } from './loop'
 
 // ---------------------------------------------------------------------------
@@ -39,6 +42,8 @@ export interface AgentOptions {
   provider: Provider
   /** Tool execution mode: 'sequential' (default) or 'parallel' */
   toolExecution?: ToolExecutionMode
+  /** Execution context: where tools run. Defaults to in-process. */
+  execution?: ExecutionContext
 }
 
 export interface Agent {
@@ -49,8 +54,12 @@ export interface Agent {
   followUp: (message: string) => void
   waitForIdle: () => Promise<void>
   reset: () => void
+  /** Destroy the execution context and clean up resources */
+  destroy: () => Promise<void>
   readonly isRunning: boolean
   readonly messages: Message[]
+  readonly execution: ExecutionContext
+  readonly handle: ExecutionHandle | null
   meta: Record<string, unknown>
 }
 
@@ -58,13 +67,15 @@ export interface Agent {
 // createAgent
 // ---------------------------------------------------------------------------
 
-export function createAgent({ harness, provider, toolExecution = 'sequential' }: AgentOptions): Agent {
+export function createAgent({ harness, provider, toolExecution = 'sequential', execution }: AgentOptions): Agent {
   const hooks = createHooks<AgentHooks>()
+  const executionContext = execution ?? createProcessContext()
 
   let abortController: AbortController | undefined
   let running = false
   let idleResolve: (() => void) | undefined
   let idlePromise: Promise<void> | undefined
+  let executionHandle: ExecutionHandle | null = null
   const steeringQueue: string[] = []
   const followUpQueue: string[] = []
   let conversationMessages: Message[] = []
@@ -79,6 +90,11 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     idlePromise = new Promise<void>((resolve) => {
       idleResolve = resolve
     })
+
+    // Spawn execution context
+    if (!executionHandle) {
+      executionHandle = await executionContext.spawn()
+    }
 
     const thinking = options.thinking ?? 'off'
     const model = options.model ?? provider.meta.defaultModel
@@ -170,6 +186,13 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     followUpQueue.length = 0
   }
 
+  async function destroy() {
+    if (executionHandle) {
+      await executionContext.destroy(executionHandle)
+      executionHandle = null
+    }
+  }
+
   return {
     hooks,
     run,
@@ -178,8 +201,11 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     followUp: followUpFn,
     waitForIdle,
     reset,
+    destroy,
     get isRunning() { return running },
     get messages() { return conversationMessages },
+    get execution() { return executionContext },
+    get handle() { return executionHandle },
     meta: provider.meta,
   }
 }

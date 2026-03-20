@@ -1,0 +1,82 @@
+/**
+ * In-process execution context.
+ *
+ * Runs everything in the current Node/Bun process.
+ * No isolation — fastest, used as the default.
+ */
+
+import type { ContextCapabilities, ExecResult, ExecutionContext, ExecutionHandle, SpawnConfig } from './types'
+import { exec as execCb } from 'node:child_process'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { promisify } from 'node:util'
+
+const execAsync = promisify(execCb)
+
+export function createProcessContext(config?: SpawnConfig): ExecutionContext {
+  let counter = 0
+  const handles = new Map<string, ExecutionHandle>()
+  const defaultCwd = config?.cwd ?? process.cwd()
+  const defaultEnv = config?.env
+
+  return {
+    type: 'process',
+
+    capabilities: {
+      shell: true,
+      filesystem: true,
+      network: true,
+      gpu: false,
+    } satisfies ContextCapabilities,
+
+    async spawn(overrides?: SpawnConfig): Promise<ExecutionHandle> {
+      const id = `process-${++counter}`
+      const cwd = overrides?.cwd ?? defaultCwd
+
+      await mkdir(cwd, { recursive: true })
+
+      const handle: ExecutionHandle = { id, type: 'process', cwd }
+      handles.set(id, handle)
+      return handle
+    },
+
+    async exec(handle: ExecutionHandle, command: string, options?: { cwd?: string, env?: Record<string, string>, timeout?: number }): Promise<ExecResult> {
+      const cwd = options?.cwd ? resolve(handle.cwd, options.cwd) : handle.cwd
+
+      try {
+        const { stdout, stderr } = await execAsync(command, {
+          cwd,
+          env: { ...process.env, ...defaultEnv, ...options?.env },
+          timeout: (options?.timeout ?? config?.limits?.timeout ?? 30) * 1000,
+          maxBuffer: 10 * 1024 * 1024,
+        })
+        return { stdout, stderr, exitCode: 0 }
+      }
+      catch (err: any) {
+        return {
+          stdout: err.stdout ?? '',
+          stderr: err.stderr ?? err.message,
+          exitCode: err.code ?? 1,
+        }
+      }
+    },
+
+    async readFile(handle: ExecutionHandle, path: string): Promise<string> {
+      return readFile(resolve(handle.cwd, path), 'utf-8')
+    },
+
+    async writeFile(handle: ExecutionHandle, path: string, content: string): Promise<void> {
+      const fullPath = resolve(handle.cwd, path)
+      await mkdir(dirname(fullPath), { recursive: true })
+      await writeFile(fullPath, content, 'utf-8')
+    },
+
+    async listFiles(handle: ExecutionHandle, path: string): Promise<string[]> {
+      return readdir(resolve(handle.cwd, path))
+    },
+
+    async destroy(handle: ExecutionHandle): Promise<void> {
+      handles.delete(handle.id)
+    },
+  }
+}
