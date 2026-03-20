@@ -8,6 +8,8 @@ Minimal TypeScript agent loop built with [Bun](https://bun.sh).
 
 Hook into every step of the agent's execution using [hookable](https://github.com/unjs/hookable).
 
+Built to be embedded in other projects easily, extended through [providers](#providers) and [harnesses](#harnesses).
+
 ## Quickstart
 
 ```bash
