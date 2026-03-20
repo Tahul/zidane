@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { createAgent } from '../src/agent'
+import { basic } from '../src/harnesses'
 import { createMockProvider } from './mock-provider'
 
 // ---------------------------------------------------------------------------
@@ -8,7 +9,7 @@ import { createMockProvider } from './mock-provider'
 
 function basicAgent(turns: Parameters<typeof createMockProvider>[0], opts?: { toolExecution?: 'sequential' | 'parallel' }) {
   const provider = createMockProvider(turns)
-  return createAgent({ harness: 'basic', provider, ...opts })
+  return createAgent({ harness: basic, provider, ...opts })
 }
 
 // ---------------------------------------------------------------------------

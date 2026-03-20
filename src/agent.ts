@@ -3,11 +3,10 @@
  */
 
 import type { Hookable } from 'hookable'
-import type { Harness } from './harnesses'
+import type { HarnessConfig } from './harnesses'
 import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
 import { createHooks } from 'hookable'
-import { harnesses } from './harnesses'
 import { runLoop } from './loop'
 
 // ---------------------------------------------------------------------------
@@ -23,9 +22,7 @@ export interface AgentHooks {
   'tool:before': (ctx: { name: string, input: Record<string, unknown> }) => void
   'tool:after': (ctx: { name: string, input: Record<string, unknown>, result: string }) => void
   'tool:error': (ctx: { name: string, input: Record<string, unknown>, error: Error }) => void
-  /** Mutate ctx.block / ctx.reason to block tool execution */
   'tool:gate': (ctx: { name: string, input: Record<string, unknown>, block: boolean, reason: string }) => void
-  /** Mutate ctx.result / ctx.isError to transform tool output */
   'tool:transform': (ctx: { name: string, input: Record<string, unknown>, result: string, isError: boolean }) => void
   'context:transform': (ctx: { messages: Message[] }) => void
   'steer:inject': (ctx: { message: string }) => void
@@ -38,7 +35,7 @@ export interface AgentHooks {
 // ---------------------------------------------------------------------------
 
 export interface AgentOptions {
-  harness: Harness
+  harness: HarnessConfig
   provider: Provider
   /** Tool execution mode: 'sequential' (default) or 'parallel' */
   toolExecution?: ToolExecutionMode
@@ -85,9 +82,11 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
 
     const thinking = options.thinking ?? 'off'
     const model = options.model ?? provider.meta.defaultModel
-    const system = options.system || 'You are a helpful assistant.'
 
-    const tools = harnesses[harness]
+    // System prompt: run-time option > harness default > fallback
+    const system = options.system || harness.system || 'You are a helpful assistant.'
+
+    const tools = harness.tools
     const toolSpecs: ToolSpec[] = Object.values(tools).map(
       t => ({
         name: t.spec.name,

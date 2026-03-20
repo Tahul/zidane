@@ -4,10 +4,10 @@
  * Usage: bun start --prompt "your message here"
  */
 
-import type { Harness } from './harnesses'
 import type { ThinkingLevel } from './types'
 import { parseArgs } from 'node:util'
 import { createAgent } from './agent'
+import { basic } from './harnesses'
 import { setupTerminalOutput } from './output/terminal'
 import { anthropic, cerebras, openrouter } from './providers'
 
@@ -17,12 +17,22 @@ const providers = {
   cerebras: cerebras(),
 }
 
+const harnesses = {
+  basic,
+} as const
+
 async function main() {
   const { system, prompt, model, harness, thinking, provider: providerName } = args()
 
-  const agent = createAgent({ harness, provider: providers[providerName as keyof typeof providers] })
+  const harnessConfig = harnesses[harness as keyof typeof harnesses]
+  if (!harnessConfig) {
+    console.error(`Unknown harness: ${harness}. Available: ${Object.keys(harnesses).join(', ')}`)
+    process.exit(1)
+  }
 
-  await setupTerminalOutput(agent, model, prompt, harness)
+  const agent = createAgent({ harness: harnessConfig, provider: providers[providerName as keyof typeof providers] })
+
+  await setupTerminalOutput(agent, model, prompt, harnessConfig)
 
   await agent.run({ model, prompt, system, thinking })
 }
@@ -44,7 +54,7 @@ function args() {
   const system = values.system as string
   const prompt = values.prompt as string
   const model = values.model as string || providers[values.provider as keyof typeof providers]?.meta.defaultModel
-  const harness = (values.harness as Harness) || 'basic'
+  const harness = (values.harness as string) || 'basic'
   const thinking = (values.thinking as ThinkingLevel) || 'off'
   const provider = values.provider as keyof typeof providers || 'anthropic'
 

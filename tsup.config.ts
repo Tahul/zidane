@@ -4,10 +4,10 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     providers: 'src/providers/index.ts',
+    harnesses: 'src/harnesses/index.ts',
   },
   format: ['esm'],
   dts: {
-    tsconfig: 'tsconfig.build.json',
     compilerOptions: {
       composite: false,
       allowImportingTsExtensions: false,

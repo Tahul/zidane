@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'bun:test'
-import { harnesses } from '../src/harnesses'
+import { basic, defineHarness } from '../src/harnesses'
 
 // ---------------------------------------------------------------------------
 // Harness: basic tools
 // ---------------------------------------------------------------------------
 
 describe('basic harness', () => {
-  const tools = harnesses.basic
+  const tools = basic.tools
+
+  it('has a name and system prompt', () => {
+    expect(basic.name).toBe('basic')
+    expect(basic.system).toBeDefined()
+    expect(typeof basic.system).toBe('string')
+  })
 
   it('exports expected tool set', () => {
     const names = Object.keys(tools)
@@ -73,5 +79,48 @@ describe('basic harness', () => {
       const result = await tools.listFiles.execute({ path: 'nonexistent-dir-xyz-12345' })
       expect(result).toContain('not found')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// defineHarness
+// ---------------------------------------------------------------------------
+
+describe('defineHarness', () => {
+  it('creates a harness config with name and tools', () => {
+    const harness = defineHarness({
+      name: 'test-harness',
+      tools: {
+        echo: {
+          spec: {
+            name: 'echo',
+            description: 'Echo input back',
+            input_schema: {
+              type: 'object' as const,
+              properties: { text: { type: 'string' } },
+              required: ['text'],
+            },
+          },
+          async execute({ text }) {
+            return text as string
+          },
+        },
+      },
+    })
+
+    expect(harness.name).toBe('test-harness')
+    expect(harness.system).toBeUndefined()
+    expect(Object.keys(harness.tools)).toEqual(['echo'])
+  })
+
+  it('creates a harness config with system prompt', () => {
+    const harness = defineHarness({
+      name: 'custom',
+      system: 'You are a code reviewer.',
+      tools: {},
+    })
+
+    expect(harness.name).toBe('custom')
+    expect(harness.system).toBe('You are a code reviewer.')
   })
 })

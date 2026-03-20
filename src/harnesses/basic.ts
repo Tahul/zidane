@@ -2,6 +2,7 @@ import type { ToolDef } from '.'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { defineHarness } from '.'
 
 const cwd = process.cwd()
 
@@ -111,9 +112,13 @@ const listFiles: ToolDef = {
   },
 }
 
-export const harness: Record<string, ToolDef> = {
-  shell,
-  readFile,
-  writeFile,
-  listFiles,
-}
+export default defineHarness({
+  name: 'basic',
+  system: 'You are a helpful assistant with access to shell, file reading, file writing, and directory listing tools. Use them to accomplish tasks in the project directory.',
+  tools: {
+    shell,
+    readFile,
+    writeFile,
+    listFiles,
+  },
+})

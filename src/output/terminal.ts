@@ -1,16 +1,16 @@
 import type { Agent } from '../agent'
+import type { HarnessConfig } from '../harnesses'
 import chalk from 'chalk'
-import { Harness, harnesses } from '../harnesses'
 import { init as initMd4x, renderToAnsi } from 'md4x/wasm'
 
-export async function setupTerminalOutput(agent: Agent, model: string, prompt: string, harness: Harness) {
+export async function setupTerminalOutput(agent: Agent, model: string, prompt: string, harness: HarnessConfig) {
   await initMd4x()
 
   console.log('\n⚽ Zizou')
   console.log(`${chalk.bold('🤖 Model:')} ${chalk.green(model)} (${agent.meta.isOAuth ? chalk.green('oauth') : chalk.red('key')})`)
   console.log(`${chalk.bold('📝 Prompt:')} ${chalk.yellow(prompt)}`)
-  console.log(`${chalk.bold('🔧 Harness:')} ${chalk.cyan(harness)}`)
-  console.log(`${chalk.bold('🔧 Tools:')} ${chalk.cyan(Object.values(harnesses[harness]).map(t => t.spec.name).join(', '))}`)
+  console.log(`${chalk.bold('🔧 Harness:')} ${chalk.cyan(harness.name)}`)
+  console.log(`${chalk.bold('🔧 Tools:')} ${chalk.cyan(Object.values(harness.tools).map(t => t.spec.name).join(', '))}`)
   console.log()
 
   let isFirstDelta = true
