@@ -1,6 +1,6 @@
 {
   "name": "zidane",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "an agent that goes straight to the goal",
   "type": "module",
   "private": false,
