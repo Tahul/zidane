@@ -9,10 +9,8 @@
  * the task to completion and returns its final response.
  */
 
-import type { Hookable } from 'hookable'
-import type { AgentHooks } from '../agent'
 import type { ExecutionContext } from '../contexts'
-import type { HarnessConfig, ToolDef } from '../harnesses'
+import type { HarnessConfig, ToolContext, ToolDef } from '../harnesses'
 import type { Provider } from '../providers'
 import type { AgentStats, ThinkingLevel } from '../types'
 import { createAgent } from '../agent'
@@ -26,9 +24,7 @@ export interface SpawnToolOptions {
   provider: Provider
   /** Harness for child agents (tools they can use) */
   harness: HarnessConfig
-  /** Parent agent hooks — used to report child stats via spawn:complete */
-  parentHooks?: Hookable<AgentHooks>
-  /** Execution context for children. If omitted, children create their own ProcessContext. */
+  /** Execution context for children. If omitted, children inherit from ToolContext or create their own. */
   execution?: ExecutionContext
   /** Maximum concurrent sub-agents (default: 3) */
   maxConcurrent?: number
@@ -38,8 +34,6 @@ export interface SpawnToolOptions {
   system?: string
   /** Thinking level for child agents */
   thinking?: ThinkingLevel
-  /** Abort signal — when triggered, all running children are aborted */
-  signal?: AbortSignal
   /** Called when a child agent starts */
   onSpawn?: (child: ChildAgent) => void
   /** Called when a child agent completes */
@@ -57,10 +51,6 @@ export interface SpawnTool extends ToolDef {
   readonly children: ReadonlyMap<string, ChildAgent>
   /** Aggregated stats from all completed children (returns a copy) */
   readonly totalChildStats: Readonly<AgentStats>
-  /** Set parent hooks after creation (for chicken-and-egg wiring) */
-  setParentHooks: (hooks: Hookable<AgentHooks>) => void
-  /** Set abort signal after creation (propagated to all children) */
-  setSignal: (signal: AbortSignal) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -71,8 +61,6 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   const children = new Map<string, ChildAgent>()
   let childCounter = 0
   let activeCount = 0
-  let parentHooks = options.parentHooks
-  let signal = options.signal
   const maxConcurrent = options.maxConcurrent ?? 3
 
   const _totalChildStats: AgentStats = {
@@ -85,8 +73,6 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   return {
     get children() { return children },
     get totalChildStats() { return { ..._totalChildStats } },
-    setParentHooks(hooks: Hookable<AgentHooks>) { parentHooks = hooks },
-    setSignal(s: AbortSignal) { signal = s },
 
     spec: {
       name: 'spawn',
@@ -107,7 +93,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
       },
     },
 
-    async execute(input: Record<string, unknown>): Promise<string> {
+    async execute(input: Record<string, unknown>, toolCtx: ToolContext): Promise<string> {
       const task = input.task as string
       const systemOverride = input.system as string | undefined
 
@@ -121,7 +107,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
       const agent = createAgent({
         harness: options.harness,
         provider: options.provider,
-        execution: options.execution,
+        execution: options.execution ?? toolCtx.execution,
       })
 
       children.set(id, child)
@@ -134,7 +120,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
           model: options.model,
           system: systemOverride ?? options.system,
           thinking: options.thinking,
-          signal,
+          signal: toolCtx.signal,
         })
 
         _totalChildStats.totalIn += stats.totalIn
@@ -145,7 +131,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
         options.onComplete?.(child, stats)
 
         // Report to parent agent for automatic stats collection
-        await parentHooks?.callHook('spawn:complete', {
+        await toolCtx.hooks.callHook('spawn:complete', {
           id,
           task,
           stats,

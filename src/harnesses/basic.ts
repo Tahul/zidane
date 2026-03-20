@@ -1,4 +1,4 @@
-import type { ToolDef } from '.'
+import type { ToolContext, ToolDef } from '.'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -25,7 +25,7 @@ const shell: ToolDef = {
       required: ['command'],
     },
   },
-  async execute({ command }) {
+  async execute({ command }, _ctx: ToolContext) {
     try {
       const out = execSync(command as string, {
         cwd,
@@ -56,7 +56,7 @@ const readFile: ToolDef = {
       required: ['path'],
     },
   },
-  async execute({ path }) {
+  async execute({ path }, _ctx: ToolContext) {
     const target = safePath(path as string)
     if (!existsSync(target))
       return `File not found: ${path}`
@@ -77,7 +77,7 @@ const writeFile: ToolDef = {
       required: ['path', 'content'],
     },
   },
-  async execute({ path, content }) {
+  async execute({ path, content }, _ctx: ToolContext) {
     const target = safePath(path as string)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, content as string)
@@ -97,7 +97,7 @@ const listFiles: ToolDef = {
       required: [],
     },
   },
-  async execute({ path }) {
+  async execute({ path }, _ctx: ToolContext) {
     const target = safePath((path as string) || '.')
     if (!existsSync(target))
       return `Directory not found: ${path}`

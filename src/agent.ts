@@ -155,6 +155,8 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
         thinking,
         toolExecution,
         signal: abortController.signal,
+        execution: executionContext,
+        handle: executionHandle!,
         steeringQueue,
         followUpQueue,
         messages,
