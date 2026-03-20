@@ -71,8 +71,6 @@ CEREBRAS_API_KEY=csk-... bun start \
   --prompt "hello"
 ```
 
-Available models: `zai-glm-4.7`, `gpt-oss-120b`
-
 ## Thinking
 
 Extended reasoning for complex tasks. Maps to Anthropic's thinking API or OpenRouter's `:thinking` variant.
