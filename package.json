@@ -3,6 +3,7 @@
   "version": "1.1.2",
   "description": "an agent that goes straight to the goal",
   "type": "module",
+  "private": false,
   "exports": {
     ".": {
       "import": "./dist/index.js",
