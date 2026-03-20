@@ -2,11 +2,15 @@
  * CLI entrypoint for the agent.
  *
  * Usage: bun start --prompt "your message here"
+ *        bun start --prompt "run ls" --context docker
+ *        bun start --prompt "do stuff" --context docker --image node:22
  */
 
+import type { ExecutionContext } from './contexts'
 import type { ThinkingLevel } from './types'
 import { parseArgs } from 'node:util'
 import { createAgent } from './agent'
+import { createDockerContext, createProcessContext } from './contexts'
 import { basic } from './harnesses'
 import { setupTerminalOutput } from './output/terminal'
 import { anthropic, cerebras, openrouter } from './providers'
@@ -22,7 +26,7 @@ const harnesses = {
 } as const
 
 async function main() {
-  const { system, prompt, model, harness, thinking, provider: providerName } = args()
+  const { system, prompt, model, harness, thinking, provider: providerName, context, image, cwd } = args()
 
   const harnessConfig = harnesses[harness as keyof typeof harnesses]
   if (!harnessConfig) {
@@ -30,11 +34,37 @@ async function main() {
     process.exit(1)
   }
 
-  const agent = createAgent({ harness: harnessConfig, provider: providers[providerName as keyof typeof providers] })
+  const executionContext = createContext(context)
+
+  const agent = createAgent({
+    harness: harnessConfig,
+    provider: providers[providerName as keyof typeof providers],
+    context: executionContext,
+    spawnConfig: { image, cwd },
+  })
+
+  if (context !== 'process') {
+    console.log(`🔧 Execution context: ${context}${image ? ` (${image})` : ''}${cwd ? ` in ${cwd}` : ''}`)
+  }
 
   await setupTerminalOutput(agent, model, prompt, harnessConfig)
 
-  await agent.run({ model, prompt, system, thinking })
+  try {
+    await agent.run({ model, prompt, system, thinking })
+  }
+  finally {
+    await agent.destroy()
+  }
+}
+
+function createContext(type: string): ExecutionContext {
+  switch (type) {
+    case 'docker':
+      return createDockerContext()
+    case 'process':
+    default:
+      return createProcessContext()
+  }
 }
 
 function args() {
@@ -45,8 +75,11 @@ function args() {
       model: { type: 'string', short: 'm' },
       harness: { type: 'string', short: 't', default: 'basic' },
       system: { type: 'string', short: 's' },
-      thinking: { type: 'string', choices: ['off', 'minimal', 'low', 'medium', 'high'], default: 'off' },
-      provider: { type: 'string', short: 'p', choices: Object.keys(providers), default: 'anthropic' },
+      thinking: { type: 'string', default: 'off' },
+      provider: { type: 'string', short: 'p', default: 'anthropic' },
+      context: { type: 'string', short: 'c', default: 'process' },
+      image: { type: 'string' },
+      cwd: { type: 'string' },
     },
     strict: false,
   })
@@ -57,13 +90,16 @@ function args() {
   const harness = (values.harness as string) || 'basic'
   const thinking = (values.thinking as ThinkingLevel) || 'off'
   const provider = values.provider as keyof typeof providers || 'anthropic'
+  const context = (values.context as string) || 'process'
+  const image = values.image as string | undefined
+  const cwd = values.cwd as string | undefined
 
   if (!prompt || (typeof prompt === 'string' && prompt.trim() === '')) {
-    console.error('Usage: bun start --prompt "your message"')
+    console.error('Usage: bun start --prompt "your message" [--context process|docker] [--image node:22] [--cwd /workspace]')
     process.exit(1)
   }
 
-  return { system, prompt, model, harness, thinking, provider }
+  return { system, prompt, model, harness, thinking, provider, context, image, cwd }
 }
 
 main().catch((err) => {

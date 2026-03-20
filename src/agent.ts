@@ -44,6 +44,8 @@ export interface AgentOptions {
   toolExecution?: ToolExecutionMode
   /** Execution context: where tools run. Defaults to in-process. */
   context?: ExecutionContext
+  /** Configuration passed to context.spawn() on first run */
+  spawnConfig?: import('./contexts').SpawnConfig
 }
 
 export interface Agent {
@@ -67,7 +69,7 @@ export interface Agent {
 // createAgent
 // ---------------------------------------------------------------------------
 
-export function createAgent({ harness, provider, toolExecution = 'sequential', context }: AgentOptions): Agent {
+export function createAgent({ harness, provider, toolExecution = 'sequential', context, spawnConfig }: AgentOptions): Agent {
   const hooks = createHooks<AgentHooks>()
   const executionContext = context ?? createProcessContext()
 
@@ -93,7 +95,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', c
 
     // Spawn execution context
     if (!executionHandle) {
-      executionHandle = await executionContext.spawn()
+      executionHandle = await executionContext.spawn(spawnConfig)
     }
 
     const thinking = options.thinking ?? 'off'
