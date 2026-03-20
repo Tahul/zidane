@@ -2,7 +2,11 @@
 
 # Zidane
 
-An agent that goes straight to the goal. Minimal TypeScript agent loop built with [Bun](https://bun.sh).
+An agent that goes straight to the goal.
+
+Minimal TypeScript agent loop built with [Bun](https://bun.sh).
+
+Hook into every step of the agent's execution using [hookable](https://github.com/unjs/hookable).
 
 ## Quickstart
 

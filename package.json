@@ -4,6 +4,16 @@
   "description": "an agent that goes straight to the goal",
   "type": "module",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tahul/zidane"
+  },
+  "author": "Yaël GUILLOUX <yael.guilloux@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Tahul/zidane/issues"
+  },
+  "homepage": "https://github.com/Tahul/zidane",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -32,8 +42,6 @@
     "test": "bun test",
     "release": "bumpp"
   },
-  "author": "Yaël GUILLOUX <yael.guilloux@gmail.com>",
-  "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@yaelg/pi-ai": "^0.58.4",
