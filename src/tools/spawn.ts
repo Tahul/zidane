@@ -7,15 +7,8 @@
  *
  * The LLM calls the tool with a task prompt. A child agent runs
  * the task to completion and returns its final response.
- *
- * Features:
- *   - Abort propagation: parent abort signal cancels all children
- *   - Stats collection: child token usage is tracked
- *   - Execution inheritance: children can inherit or isolate execution
- *   - Concurrency limit: cap parallel sub-agents
  */
 
-import type { Agent, AgentOptions } from '../agent'
 import type { ExecutionContext } from '../contexts'
 import type { HarnessConfig, ToolDef } from '../harnesses'
 import type { Provider } from '../providers'
@@ -31,13 +24,13 @@ export interface SpawnToolOptions {
   provider: Provider
   /** Harness for child agents (tools they can use) */
   harness: HarnessConfig
-  /** How children get their execution context */
-  execution?: 'inherit' | ExecutionContext
+  /** Execution context for children. If omitted, children create their own ProcessContext. */
+  execution?: ExecutionContext
   /** Maximum concurrent sub-agents (default: 3) */
   maxConcurrent?: number
   /** Model override for child agents */
   model?: string
-  /** System prompt override for child agents */
+  /** System prompt for child agents */
   system?: string
   /** Thinking level for child agents */
   thinking?: ThinkingLevel
@@ -50,15 +43,21 @@ export interface SpawnToolOptions {
 export interface ChildAgent {
   id: string
   task: string
-  agent: Agent
   startedAt: number
+}
+
+export interface SpawnTool extends ToolDef {
+  /** Currently running children */
+  readonly children: ReadonlyMap<string, ChildAgent>
+  /** Aggregated stats from all completed children */
+  readonly totalChildStats: Readonly<AgentStats>
 }
 
 // ---------------------------------------------------------------------------
 // createSpawnTool
 // ---------------------------------------------------------------------------
 
-export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children: Map<string, ChildAgent>, totalChildStats: AgentStats } {
+export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   const children = new Map<string, ChildAgent>()
   let childCounter = 0
   let activeCount = 0
@@ -71,16 +70,9 @@ export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children
     elapsed: 0,
   }
 
-  function getChildExecution(parentAgent?: Agent): ExecutionContext | undefined {
-    if (!options.execution || options.execution === 'inherit') {
-      return parentAgent?.execution
-    }
-    return options.execution
-  }
-
-  const tool: ToolDef & { children: Map<string, ChildAgent>, totalChildStats: AgentStats } = {
-    children,
-    totalChildStats,
+  return {
+    get children() { return children },
+    get totalChildStats() { return totalChildStats },
 
     spec: {
       name: 'spawn',
@@ -110,15 +102,13 @@ export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children
       }
 
       const id = `child-${++childCounter}`
+      const child: ChildAgent = { id, task, startedAt: Date.now() }
 
-      const childOptions: AgentOptions = {
+      const agent = createAgent({
         harness: options.harness,
         provider: options.provider,
-        execution: getChildExecution(),
-      }
-
-      const agent = createAgent(childOptions)
-      const child: ChildAgent = { id, task, agent, startedAt: Date.now() }
+        execution: options.execution,
+      })
 
       children.set(id, child)
       activeCount++
@@ -132,7 +122,6 @@ export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children
           thinking: options.thinking,
         })
 
-        // Collect stats
         totalChildStats.totalIn += stats.totalIn
         totalChildStats.totalOut += stats.totalOut
         totalChildStats.turns += stats.turns
@@ -140,9 +129,7 @@ export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children
 
         options.onComplete?.(child, stats)
 
-        // Extract final text response
-        const lastMessage = agent.messages.at(-1)
-        const response = extractText(lastMessage)
+        const response = extractText(agent.messages.at(-1))
 
         return [
           `[sub-agent ${id}] Completed in ${stats.turns} turns (${stats.elapsed}ms)`,
@@ -161,8 +148,6 @@ export function createSpawnTool(options: SpawnToolOptions): ToolDef & { children
       }
     },
   }
-
-  return tool
 }
 
 // ---------------------------------------------------------------------------
@@ -180,8 +165,8 @@ function extractText(message: unknown): string {
 
   if (Array.isArray(msg.content)) {
     return msg.content
-      .filter((block: any) => block.type === 'text')
-      .map((block: any) => block.text)
+      .filter((block: Record<string, unknown>) => block.type === 'text')
+      .map((block: Record<string, unknown>) => block.text)
       .join('\n')
   }
 
