@@ -38,6 +38,8 @@ export interface SpawnToolOptions {
   system?: string
   /** Thinking level for child agents */
   thinking?: ThinkingLevel
+  /** Abort signal — when triggered, all running children are aborted */
+  signal?: AbortSignal
   /** Called when a child agent starts */
   onSpawn?: (child: ChildAgent) => void
   /** Called when a child agent completes */
@@ -53,10 +55,12 @@ export interface ChildAgent {
 export interface SpawnTool extends ToolDef {
   /** Currently running children */
   readonly children: ReadonlyMap<string, ChildAgent>
-  /** Aggregated stats from all completed children */
+  /** Aggregated stats from all completed children (returns a copy) */
   readonly totalChildStats: Readonly<AgentStats>
   /** Set parent hooks after creation (for chicken-and-egg wiring) */
   setParentHooks: (hooks: Hookable<AgentHooks>) => void
+  /** Set abort signal after creation (propagated to all children) */
+  setSignal: (signal: AbortSignal) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -68,9 +72,10 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   let childCounter = 0
   let activeCount = 0
   let parentHooks = options.parentHooks
+  let signal = options.signal
   const maxConcurrent = options.maxConcurrent ?? 3
 
-  const totalChildStats: AgentStats = {
+  const _totalChildStats: AgentStats = {
     totalIn: 0,
     totalOut: 0,
     turns: 0,
@@ -79,8 +84,9 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
 
   return {
     get children() { return children },
-    get totalChildStats() { return totalChildStats },
+    get totalChildStats() { return { ..._totalChildStats } },
     setParentHooks(hooks: Hookable<AgentHooks>) { parentHooks = hooks },
+    setSignal(s: AbortSignal) { signal = s },
 
     spec: {
       name: 'spawn',
@@ -128,12 +134,13 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
           model: options.model,
           system: systemOverride ?? options.system,
           thinking: options.thinking,
+          signal,
         })
 
-        totalChildStats.totalIn += stats.totalIn
-        totalChildStats.totalOut += stats.totalOut
-        totalChildStats.turns += stats.turns
-        totalChildStats.elapsed += stats.elapsed
+        _totalChildStats.totalIn += stats.totalIn
+        _totalChildStats.totalOut += stats.totalOut
+        _totalChildStats.turns += stats.turns
+        _totalChildStats.elapsed += stats.elapsed
 
         options.onComplete?.(child, stats)
 

@@ -44,13 +44,20 @@ describe('createSpawnTool', () => {
   })
 
   it('handles child agent errors gracefully', async () => {
-    const provider = mockProvider([])
-    // Provider with no turns will throw
-    const tool = createSpawnTool({ provider, harness: basic })
+    // Create a provider that throws during stream
+    const errorProvider: Parameters<typeof createSpawnTool>[0]['provider'] = {
+      ...mockProvider([]),
+      async stream() {
+        throw new Error('LLM connection failed')
+      },
+    }
+    const tool = createSpawnTool({ provider: errorProvider, harness: basic })
 
     const result = await tool.execute({ task: 'this will fail' })
 
-    expect(result).toContain('Completed')
+    expect(result).toContain('Error')
+    expect(result).toContain('child-1')
+    expect(result).toContain('LLM connection failed')
   })
 
   it('tracks total child stats', async () => {
@@ -348,6 +355,85 @@ describe('child stats reporting', () => {
     const stats = await agent.run({ prompt: 'hello' })
 
     expect(stats.children).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Abort propagation
+// ---------------------------------------------------------------------------
+
+describe('abort propagation', () => {
+  it('aborts child agents when signal is triggered', async () => {
+    const controller = new AbortController()
+    // Pre-abort so the child agent gets an already-aborted signal
+    controller.abort()
+
+    const provider = mockProvider([
+      { text: 'should not reach here', done: true },
+    ])
+    const tool = createSpawnTool({
+      provider,
+      harness: basic,
+      signal: controller.signal,
+    })
+
+    const result = await tool.execute({ task: 'long running task' })
+
+    // Child should complete gracefully with 0 stats (aborted path)
+    expect(result).toContain('child-1')
+    expect(result).toContain('Completed')
+    expect(result).toContain('0 turns')
+  })
+
+  it('supports setSignal for late binding', async () => {
+    const controller = new AbortController()
+    const provider = mockProvider([{ text: 'done', done: true }])
+    const tool = createSpawnTool({ provider, harness: basic })
+
+    tool.setSignal(controller.signal)
+
+    const result = await tool.execute({ task: 'test' })
+    expect(result).toContain('Completed')
+  })
+
+  it('rejects immediately if signal already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const provider = mockProvider([{ text: 'done', done: true }])
+    const tool = createSpawnTool({
+      provider,
+      harness: basic,
+      signal: controller.signal,
+    })
+
+    const result = await tool.execute({ task: 'too late' })
+
+    // Child should still complete (aborted agent returns gracefully with 0 stats)
+    expect(result).toContain('child-1')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// totalChildStats immutability
+// ---------------------------------------------------------------------------
+
+describe('totalChildStats immutability', () => {
+  it('returns a copy — mutations do not affect internal state', async () => {
+    const provider = mockProvider([
+      { text: 'done', done: true },
+      { text: 'done', done: true },
+    ])
+    const tool = createSpawnTool({ provider, harness: basic })
+
+    await tool.execute({ task: 'task 1' })
+
+    // Mutate the returned copy
+    const stats1 = tool.totalChildStats as AgentStats
+    stats1.turns = 9999
+
+    // Internal state should be unaffected
+    await tool.execute({ task: 'task 2' })
+    expect(tool.totalChildStats.turns).toBeLessThan(100) // definitely not 9999+
   })
 })
 

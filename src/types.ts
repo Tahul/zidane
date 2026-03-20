@@ -41,6 +41,8 @@ export interface AgentRunOptions {
   system?: string
   thinking?: ThinkingLevel
   images?: ImageContent[]
+  /** Abort signal — when triggered, the agent stops after the current turn */
+  signal?: AbortSignal
 }
 
 // ---------------------------------------------------------------------------

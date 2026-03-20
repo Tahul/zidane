@@ -88,6 +88,18 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
 
     running = true
     abortController = new AbortController()
+
+    // If an external signal is provided, wire it to our internal controller
+    if (options.signal) {
+      if (options.signal.aborted) {
+        abortController.abort()
+      }
+      else {
+        const onExternalAbort = () => abortController?.abort()
+        options.signal.addEventListener('abort', onExternalAbort, { once: true })
+      }
+    }
+
     idlePromise = new Promise<void>((resolve) => {
       idleResolve = resolve
     })
