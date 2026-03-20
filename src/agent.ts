@@ -3,9 +3,11 @@
  */
 
 import type { Hookable } from 'hookable'
+import type { ExecutionContext, ExecutionHandle } from './contexts'
 import type { HarnessConfig } from './harnesses'
 import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
+import { createProcessContext } from './contexts'
 import { createHooks } from 'hookable'
 import { runLoop } from './loop'
 
@@ -39,6 +41,8 @@ export interface AgentOptions {
   provider: Provider
   /** Tool execution mode: 'sequential' (default) or 'parallel' */
   toolExecution?: ToolExecutionMode
+  /** Execution context: where tools run. Defaults to in-process. */
+  context?: ExecutionContext
 }
 
 export interface Agent {
@@ -51,6 +55,8 @@ export interface Agent {
   reset: () => void
   readonly isRunning: boolean
   readonly messages: Message[]
+  readonly context: ExecutionContext
+  readonly handle: ExecutionHandle | null
   meta: Record<string, unknown>
 }
 
@@ -58,13 +64,15 @@ export interface Agent {
 // createAgent
 // ---------------------------------------------------------------------------
 
-export function createAgent({ harness, provider, toolExecution = 'sequential' }: AgentOptions): Agent {
+export function createAgent({ harness, provider, toolExecution = 'sequential', context }: AgentOptions): Agent {
   const hooks = createHooks<AgentHooks>()
+  const executionContext = context ?? createProcessContext()
 
   let abortController: AbortController | undefined
   let running = false
   let idleResolve: (() => void) | undefined
   let idlePromise: Promise<void> | undefined
+  let executionHandle: ExecutionHandle | null = null
   const steeringQueue: string[] = []
   const followUpQueue: string[] = []
   let conversationMessages: Message[] = []
@@ -79,6 +87,11 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     idlePromise = new Promise<void>((resolve) => {
       idleResolve = resolve
     })
+
+    // Spawn execution context
+    if (!executionHandle) {
+      executionHandle = await executionContext.spawn()
+    }
 
     const thinking = options.thinking ?? 'off'
     const model = options.model ?? provider.meta.defaultModel
@@ -180,6 +193,8 @@ export function createAgent({ harness, provider, toolExecution = 'sequential' }:
     reset,
     get isRunning() { return running },
     get messages() { return conversationMessages },
+    get context() { return executionContext },
+    get handle() { return executionHandle },
     meta: provider.meta,
   }
 }
