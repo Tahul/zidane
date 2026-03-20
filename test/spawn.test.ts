@@ -300,3 +300,75 @@ describe('integration with parent agent', () => {
     expect(spawnTool.totalChildStats.turns).toBeGreaterThanOrEqual(2)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Child stats reported to parent
+// ---------------------------------------------------------------------------
+
+describe('child stats reporting', () => {
+  it('parent stats include children when parentHooks is set', async () => {
+    const childProvider = mockProvider([
+      { text: 'sub result', done: true },
+    ])
+
+    const parentProvider = mockProvider([
+      {
+        text: 'delegating',
+        toolCalls: [{ id: 'tc1', name: 'spawn', input: { task: 'child task' } }],
+      },
+      { text: 'done', done: true },
+    ])
+
+    // Create spawn tool first, then wire parentHooks after agent creation
+    const spawnTool = createSpawnTool({
+      provider: childProvider,
+      harness: basic,
+    })
+
+    const harness = defineHarness({
+      name: 'with-spawn',
+      tools: { spawn: spawnTool },
+    })
+
+    const agent = createAgent({ harness, provider: parentProvider })
+    spawnTool.setParentHooks(agent.hooks)
+
+    const stats = await agent.run({ prompt: 'delegate' })
+
+    expect(stats.children).toBeDefined()
+    expect(stats.children).toHaveLength(1)
+    expect(stats.children![0].id).toBe('child-1')
+    expect(stats.children![0].task).toBe('child task')
+    expect(stats.children![0].stats.turns).toBeGreaterThanOrEqual(1)
+  })
+
+  it('parent stats have no children field when no spawns occur', async () => {
+    const provider = mockProvider([{ text: 'no spawning', done: true }])
+    const agent = createAgent({ harness: basic, provider })
+    const stats = await agent.run({ prompt: 'hello' })
+
+    expect(stats.children).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Multi-turn child (child uses tools)
+// ---------------------------------------------------------------------------
+
+describe('multi-turn child', () => {
+  it('child can use tools and return multi-turn result', async () => {
+    const childProvider = mockProvider([
+      {
+        text: 'Let me check',
+        toolCalls: [{ id: 'tc1', name: 'shell', input: { command: 'echo 42' } }],
+      },
+      { text: 'The answer is 42.', done: true },
+    ])
+
+    const tool = createSpawnTool({ provider: childProvider, harness: basic })
+    const result = await tool.execute({ task: 'what is the answer?' })
+
+    expect(result).toContain('Completed in 2 turns')
+    expect(tool.totalChildStats.turns).toBe(2)
+  })
+})

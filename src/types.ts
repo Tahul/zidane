@@ -52,4 +52,12 @@ export interface AgentStats {
   totalOut: number
   turns: number
   elapsed: number
+  /** Stats from child agents spawned during this run */
+  children?: ChildRunStats[]
+}
+
+export interface ChildRunStats {
+  id: string
+  task: string
+  stats: AgentStats
 }

@@ -9,6 +9,8 @@
  * the task to completion and returns its final response.
  */
 
+import type { Hookable } from 'hookable'
+import type { AgentHooks } from '../agent'
 import type { ExecutionContext } from '../contexts'
 import type { HarnessConfig, ToolDef } from '../harnesses'
 import type { Provider } from '../providers'
@@ -24,6 +26,8 @@ export interface SpawnToolOptions {
   provider: Provider
   /** Harness for child agents (tools they can use) */
   harness: HarnessConfig
+  /** Parent agent hooks — used to report child stats via spawn:complete */
+  parentHooks?: Hookable<AgentHooks>
   /** Execution context for children. If omitted, children create their own ProcessContext. */
   execution?: ExecutionContext
   /** Maximum concurrent sub-agents (default: 3) */
@@ -51,6 +55,8 @@ export interface SpawnTool extends ToolDef {
   readonly children: ReadonlyMap<string, ChildAgent>
   /** Aggregated stats from all completed children */
   readonly totalChildStats: Readonly<AgentStats>
+  /** Set parent hooks after creation (for chicken-and-egg wiring) */
+  setParentHooks: (hooks: Hookable<AgentHooks>) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +67,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   const children = new Map<string, ChildAgent>()
   let childCounter = 0
   let activeCount = 0
+  let parentHooks = options.parentHooks
   const maxConcurrent = options.maxConcurrent ?? 3
 
   const totalChildStats: AgentStats = {
@@ -73,6 +80,7 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   return {
     get children() { return children },
     get totalChildStats() { return totalChildStats },
+    setParentHooks(hooks: Hookable<AgentHooks>) { parentHooks = hooks },
 
     spec: {
       name: 'spawn',
@@ -128,6 +136,13 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
         totalChildStats.elapsed += stats.elapsed
 
         options.onComplete?.(child, stats)
+
+        // Report to parent agent for automatic stats collection
+        await parentHooks?.callHook('spawn:complete', {
+          id,
+          task,
+          stats,
+        })
 
         const response = extractText(agent.messages.at(-1))
 
