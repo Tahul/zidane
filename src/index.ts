@@ -4,4 +4,6 @@ export { createDockerContext, createProcessContext, createSandboxContext } from 
 export type { ContextCapabilities, ContextType, ExecResult, ExecutionContext, ExecutionHandle, SandboxProvider, SpawnConfig } from './contexts'
 export { defineHarness } from './harnesses'
 export type { Harness, HarnessConfig, ToolDef, ToolMap } from './harnesses'
+export { createSpawnTool } from './tools'
+export type { ChildAgent, SpawnToolOptions } from './tools'
 export type { AgentRunOptions, AgentStats, ContentBlock, ImageContent, ThinkingLevel, ToolExecutionMode } from './types'
