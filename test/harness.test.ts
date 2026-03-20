@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { basic, defineHarness } from '../src/harnesses'
+import { basic, createBasicHarness, defineHarness } from '../src/harnesses'
+import { createMockProvider } from './mock-provider'
 
 // ---------------------------------------------------------------------------
 // Harness: basic tools
@@ -79,6 +80,54 @@ describe('basic harness', () => {
       const result = await tools.listFiles.execute({ path: 'nonexistent-dir-xyz-12345' })
       expect(result).toContain('not found')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// createBasicHarness
+// ---------------------------------------------------------------------------
+
+describe('createBasicHarness', () => {
+  it('returns base basic harness when no options', () => {
+    const harness = createBasicHarness()
+    expect(harness.name).toBe('basic')
+    expect(Object.keys(harness.tools)).not.toContain('spawn')
+    // Should have the 4 core tools
+    expect(Object.keys(harness.tools)).toEqual(Object.keys(basic.tools))
+  })
+
+  it('returns base basic harness when no provider', () => {
+    const harness = createBasicHarness({})
+    expect(Object.keys(harness.tools)).not.toContain('spawn')
+  })
+
+  it('includes spawn tool when provider is given', () => {
+    const provider = createMockProvider([{ text: 'done', done: true }])
+    const harness = createBasicHarness({ provider })
+
+    expect(Object.keys(harness.tools)).toContain('spawn')
+    expect(Object.keys(harness.tools)).toContain('shell')
+    expect(Object.keys(harness.tools)).toContain('readFile')
+    expect(harness.tools.spawn.spec.name).toBe('spawn')
+  })
+
+  it('spawn tool has correct spec', () => {
+    const provider = createMockProvider([{ text: 'done', done: true }])
+    const harness = createBasicHarness({ provider })
+    const spawn = harness.tools.spawn
+
+    expect(spawn.spec.name).toBe('spawn')
+    expect((spawn.spec.input_schema as any).required).toContain('task')
+  })
+
+  it('passes spawn options through', () => {
+    const provider = createMockProvider([{ text: 'done', done: true }])
+    const harness = createBasicHarness({
+      provider,
+      spawn: { maxConcurrent: 5 },
+    })
+
+    expect(harness.tools.spawn).toBeDefined()
   })
 })
 

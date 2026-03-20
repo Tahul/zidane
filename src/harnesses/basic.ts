@@ -112,13 +112,11 @@ const listFiles: ToolDef = {
   },
 }
 
+/** Core tools available in every basic harness */
+export const basicTools = { shell, readFile, writeFile, listFiles }
+
 export default defineHarness({
   name: 'basic',
   system: 'You are a helpful assistant with access to shell, file reading, file writing, and directory listing tools. Use them to accomplish tasks in the project directory.',
-  tools: {
-    shell,
-    readFile,
-    writeFile,
-    listFiles,
-  },
+  tools: basicTools,
 })

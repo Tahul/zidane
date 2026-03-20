@@ -43,4 +43,6 @@ export function defineHarness(config: HarnessConfig): HarnessConfig {
 
 export type Harness = HarnessConfig
 
-export { default as basic } from './basic'
+export { default as basic, basicTools } from './basic'
+export { createBasicHarness } from './create-basic'
+export type { BasicHarnessOptions } from './create-basic'
