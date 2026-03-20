@@ -54,6 +54,8 @@ export interface Agent {
   followUp: (message: string) => void
   waitForIdle: () => Promise<void>
   reset: () => void
+  /** Destroy the execution context and clean up resources */
+  destroy: () => Promise<void>
   readonly isRunning: boolean
   readonly messages: Message[]
   readonly context: ExecutionContext
@@ -184,6 +186,13 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', c
     followUpQueue.length = 0
   }
 
+  async function destroy() {
+    if (executionHandle) {
+      await executionContext.destroy(executionHandle)
+      executionHandle = null
+    }
+  }
+
   return {
     hooks,
     run,
@@ -192,6 +201,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', c
     followUp: followUpFn,
     waitForIdle,
     reset,
+    destroy,
     get isRunning() { return running },
     get messages() { return conversationMessages },
     get context() { return executionContext },

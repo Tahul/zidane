@@ -310,3 +310,52 @@ describe('Agent with execution context', () => {
     expect(result.stdout).toBe('mock output')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Agent destroy
+// ---------------------------------------------------------------------------
+
+describe('Agent destroy', () => {
+  it('destroys the execution context handle', async () => {
+    const mockCtx = createMockContext()
+    const provider = createMockProvider([{ text: 'hello', done: true }])
+    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+
+    await agent.run({ prompt: 'hi' })
+    expect(agent.handle).not.toBeNull()
+
+    await agent.destroy()
+    expect(agent.handle).toBeNull()
+    expect(mockCtx.operations.filter(o => o.type === 'destroy')).toHaveLength(1)
+  })
+
+  it('is safe to call destroy without a handle', async () => {
+    const mockCtx = createMockContext()
+    const provider = createMockProvider([{ text: 'hello', done: true }])
+    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+
+    // Never called run, so no handle
+    await agent.destroy()
+    expect(mockCtx.operations.filter(o => o.type === 'destroy')).toHaveLength(0)
+  })
+
+  it('allows re-spawn after destroy', async () => {
+    const mockCtx = createMockContext()
+    const provider = createMockProvider([
+      { text: 'first', done: true },
+      { text: 'second', done: true },
+    ])
+    const agent = createAgent({ harness: basic, provider, context: mockCtx })
+
+    await agent.run({ prompt: 'first' })
+    const firstId = agent.handle!.id
+    await agent.destroy()
+
+    await agent.run({ prompt: 'second' })
+    const secondId = agent.handle!.id
+
+    // New handle after destroy + re-run
+    expect(firstId).not.toBe(secondId)
+    expect(mockCtx.operations.filter(o => o.type === 'spawn')).toHaveLength(2)
+  })
+})

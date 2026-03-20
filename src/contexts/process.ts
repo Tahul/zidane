@@ -14,9 +14,8 @@ import { promisify } from 'node:util'
 
 const execAsync = promisify(execCb)
 
-let counter = 0
-
 export function createProcessContext(): ExecutionContext {
+  let counter = 0
   const handles = new Map<string, ExecutionHandle>()
 
   return {

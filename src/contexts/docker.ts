@@ -7,13 +7,9 @@
  * Requires `dockerode` as an optional peer dependency.
  */
 
-import type { Buffer } from 'node:buffer'
-
 import type { ContextCapabilities, ExecResult, ExecutionContext, ExecutionHandle, SpawnConfig } from './types'
 
 const SINGLE_QUOTE_RE = /'/g
-
-let counter = 0
 
 interface ContainerRef {
   handle: ExecutionHandle
@@ -22,6 +18,7 @@ interface ContainerRef {
 }
 
 export function createDockerContext(): ExecutionContext {
+  let counter = 0
   const containers = new Map<string, ContainerRef>()
 
   async function getDockerode() {
@@ -121,7 +118,7 @@ export function createDockerContext(): ExecutionContext {
           resolve({ stdout, stderr: `${stderr}\n[timeout]`, exitCode: 124 })
         }, timeout * 1000)
 
-        stream.on('data', (chunk: Buffer) => {
+        stream.on('data', (chunk: { toString: (enc: string) => string }) => {
           stdout += chunk.toString('utf-8')
         })
 
