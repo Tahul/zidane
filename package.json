@@ -23,6 +23,10 @@
       "import": "./dist/providers.js",
       "types": "./dist/providers.d.ts"
     },
+    "./tools": {
+      "import": "./dist/tools.js",
+      "types": "./dist/tools.d.ts"
+    },
     "./harnesses": {
       "import": "./dist/harnesses.js",
       "types": "./dist/harnesses.d.ts"
