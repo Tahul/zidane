@@ -6,7 +6,7 @@ import { describe, expect, it } from 'bun:test'
 import { createHooks } from 'hookable'
 import { createAgent } from '../src/agent'
 import { basic, defineHarness } from '../src/harnesses'
-import { createSpawnTool } from '../src/tools'
+import { createSpawnTool, spawn } from '../src/tools'
 import { createMockContext } from './mock-context'
 import { createMockProvider } from './mock-provider'
 
@@ -22,22 +22,41 @@ function mockProvider(turns: Parameters<typeof createMockProvider>[0]) {
 function mockToolCtx(overrides?: Partial<ToolContext>): ToolContext {
   const mockCtx = createMockContext()
   const hooks = createHooks()
+  const defaultProvider = mockProvider([{ text: 'ctx-default', done: true }])
   return {
+    provider: overrides?.provider ?? defaultProvider,
     signal: overrides?.signal ?? new AbortController().signal,
     execution: overrides?.execution ?? mockCtx,
     handle: overrides?.handle ?? { id: 'test-handle', type: 'process', cwd: '/tmp' },
     hooks: overrides?.hooks ?? hooks as any,
+    harness: overrides?.harness ?? basic,
   }
 }
 
 // ---------------------------------------------------------------------------
-// createSpawnTool
+// Static spawn tool
+// ---------------------------------------------------------------------------
+
+describe('spawn (static tool)', () => {
+  it('has correct spec', () => {
+    expect(spawn.spec.name).toBe('spawn')
+    expect(spawn.spec.input_schema.required).toContain('task')
+    expect(typeof spawn.execute).toBe('function')
+  })
+
+  it('is included in basic harness', () => {
+    expect(basic.tools.spawn).toBeDefined()
+    expect(basic.tools.spawn.spec.name).toBe('spawn')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// createSpawnTool (configurable factory)
 // ---------------------------------------------------------------------------
 
 describe('createSpawnTool', () => {
-  it('creates a valid ToolDef', () => {
-    const provider = mockProvider([{ text: 'hi', done: true }])
-    const tool = createSpawnTool({ provider, harness: basic })
+  it('creates a valid ToolDef with defaults', () => {
+    const tool = createSpawnTool()
 
     expect(tool.spec.name).toBe('spawn')
     expect(tool.spec.input_schema.required).toContain('task')
@@ -48,26 +67,27 @@ describe('createSpawnTool', () => {
     const provider = mockProvider([
       { text: 'I completed the task successfully.', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
 
-    const result = await tool.execute({ task: 'do something' }, mockToolCtx())
+    const result = await tool.execute({ task: 'do something' }, mockToolCtx({ provider }))
 
-    expect(result).toContain('Completed')
     expect(result).toContain('Completed')
     expect(result).toContain('child-1')
   })
 
   it('handles child agent errors gracefully', async () => {
-    // Create a provider that throws during stream
-    const errorProvider: Parameters<typeof createSpawnTool>[0]['provider'] = {
+    const errorProvider = {
       ...mockProvider([]),
       async stream() {
         throw new Error('LLM connection failed')
       },
     }
-    const tool = createSpawnTool({ provider: errorProvider, harness: basic })
+    const tool = createSpawnTool()
 
-    const result = await tool.execute({ task: 'this will fail' }, mockToolCtx())
+    const result = await tool.execute(
+      { task: 'this will fail' },
+      mockToolCtx({ provider: errorProvider as any }),
+    )
 
     expect(result).toContain('Error')
     expect(result).toContain('child-1')
@@ -79,10 +99,11 @@ describe('createSpawnTool', () => {
       { text: 'done 1', done: true },
       { text: 'done 2', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
+    const ctx = mockToolCtx({ provider })
 
-    await tool.execute({ task: 'task 1' }, mockToolCtx())
-    await tool.execute({ task: 'task 2' }, mockToolCtx())
+    await tool.execute({ task: 'task 1' }, ctx)
+    await tool.execute({ task: 'task 2' }, ctx)
 
     expect(tool.totalChildStats.turns).toBeGreaterThanOrEqual(2)
     expect(tool.totalChildStats.totalOut).toBeGreaterThan(0)
@@ -90,11 +111,11 @@ describe('createSpawnTool', () => {
 
   it('cleans up children map after completion', async () => {
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
 
     expect(tool.children.size).toBe(0)
-    await tool.execute({ task: 'task' }, mockToolCtx())
-    expect(tool.children.size).toBe(0) // cleaned up after completion
+    await tool.execute({ task: 'task' }, mockToolCtx({ provider }))
+    expect(tool.children.size).toBe(0)
   })
 
   it('increments child IDs', async () => {
@@ -102,10 +123,11 @@ describe('createSpawnTool', () => {
       { text: 'done', done: true },
       { text: 'done', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
+    const ctx = mockToolCtx({ provider })
 
-    const r1 = await tool.execute({ task: 'first' }, mockToolCtx())
-    const r2 = await tool.execute({ task: 'second' }, mockToolCtx())
+    const r1 = await tool.execute({ task: 'first' }, ctx)
+    const r2 = await tool.execute({ task: 'second' }, ctx)
 
     expect(r1).toContain('child-1')
     expect(r2).toContain('child-2')
@@ -118,20 +140,20 @@ describe('createSpawnTool', () => {
 
 describe('concurrency limit', () => {
   it('rejects when maxConcurrent is reached', async () => {
-    // Use a provider that takes a while (multiple turns with tool calls)
     const provider = mockProvider([
       { text: 'working', toolCalls: [{ id: 'tc1', name: 'shell', input: { command: 'echo hi' } }] },
       { text: 'done', done: true },
       { text: 'working', toolCalls: [{ id: 'tc2', name: 'shell', input: { command: 'echo hi' } }] },
       { text: 'done', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic, maxConcurrent: 1 })
+    const tool = createSpawnTool({ maxConcurrent: 1 })
+    const ctx = mockToolCtx({ provider })
 
     // Start first task (will be running)
-    const p1 = tool.execute({ task: 'slow task' }, mockToolCtx())
+    const p1 = tool.execute({ task: 'slow task' }, ctx)
 
     // Try to start second immediately — should be rejected
-    const result = await tool.execute({ task: 'blocked task' }, mockToolCtx())
+    const result = await tool.execute({ task: 'blocked task' }, ctx)
     expect(result).toContain('Cannot spawn')
     expect(result).toContain('1/1')
 
@@ -148,12 +170,10 @@ describe('callbacks', () => {
     const spawned: ChildAgent[] = []
     const provider = mockProvider([{ text: 'done', done: true }])
     const tool = createSpawnTool({
-      provider,
-      harness: basic,
       onSpawn: child => spawned.push(child),
     })
 
-    await tool.execute({ task: 'test task' }, mockToolCtx())
+    await tool.execute({ task: 'test task' }, mockToolCtx({ provider }))
 
     expect(spawned).toHaveLength(1)
     expect(spawned[0].id).toBe('child-1')
@@ -165,12 +185,10 @@ describe('callbacks', () => {
     const completed: { child: ChildAgent, stats: AgentStats }[] = []
     const provider = mockProvider([{ text: 'done', done: true }])
     const tool = createSpawnTool({
-      provider,
-      harness: basic,
       onComplete: (child, stats) => completed.push({ child, stats }),
     })
 
-    await tool.execute({ task: 'test' }, mockToolCtx())
+    await tool.execute({ task: 'test' }, mockToolCtx({ provider }))
 
     expect(completed).toHaveLength(1)
     expect(completed[0].stats.turns).toBe(1)
@@ -183,31 +201,22 @@ describe('callbacks', () => {
 // ---------------------------------------------------------------------------
 
 describe('execution context', () => {
-  it('uses provided execution context', async () => {
+  it('child uses execution context from ToolContext', async () => {
     const mockCtx = createMockContext()
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({
-      provider,
-      harness: basic,
-      execution: mockCtx,
-    })
+    const tool = createSpawnTool()
 
-    await tool.execute({ task: 'test' }, mockToolCtx())
+    await tool.execute({ task: 'test' }, mockToolCtx({ provider, execution: mockCtx }))
 
-    // Child should have spawned in the mock context
     expect(mockCtx.operations.some(o => o.type === 'spawn')).toBe(true)
   })
 
   it('destroys child execution handle after completion', async () => {
     const mockCtx = createMockContext()
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({
-      provider,
-      harness: basic,
-      execution: mockCtx,
-    })
+    const tool = createSpawnTool()
 
-    await tool.execute({ task: 'test' }, mockToolCtx())
+    await tool.execute({ task: 'test' }, mockToolCtx({ provider, execution: mockCtx }))
 
     expect(mockCtx.operations.some(o => o.type === 'destroy')).toBe(true)
   })
@@ -220,29 +229,20 @@ describe('execution context', () => {
 describe('system prompt', () => {
   it('passes global system prompt to children', async () => {
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({
-      provider,
-      harness: basic,
-      system: 'you are a researcher',
-    })
+    const tool = createSpawnTool({ system: 'you are a researcher' })
 
-    // Hook into the child to see what system prompt it got
-    const result = await tool.execute({ task: 'research something' }, mockToolCtx())
+    const result = await tool.execute({ task: 'research something' }, mockToolCtx({ provider }))
     expect(result).toContain('Completed')
   })
 
   it('allows per-spawn system prompt override', async () => {
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({
-      provider,
-      harness: basic,
-      system: 'default system',
-    })
+    const tool = createSpawnTool({ system: 'default system' })
 
     const result = await tool.execute({
       task: 'do stuff',
       system: 'custom system for this task',
-    }, mockToolCtx())
+    }, mockToolCtx({ provider }))
 
     expect(result).toContain('Completed')
   })
@@ -254,67 +254,56 @@ describe('system prompt', () => {
 
 describe('integration with parent agent', () => {
   it('works as a tool inside a harness', async () => {
-    // Child provider
-    const childProvider = mockProvider([
-      { text: 'sub-agent result: 42', done: true },
-    ])
-
-    const spawnTool = createSpawnTool({
-      provider: childProvider,
-      harness: basic,
-    })
-
-    // Parent provider — calls spawn tool, then finishes
-    const parentProvider = mockProvider([
+    // Provider handles both parent and child turns
+    const provider = mockProvider([
+      // Parent turn 1: calls spawn
       {
         text: 'Let me delegate this',
         toolCalls: [{ id: 'tc1', name: 'spawn', input: { task: 'calculate 6 * 7' } }],
       },
+      // Child turn 1: responds
+      { text: 'sub-agent result: 42', done: true },
+      // Parent turn 2: final response
       { text: 'The answer is 42', done: true },
     ])
+
+    const spawnTool = createSpawnTool()
 
     const harness = defineHarness({
       name: 'orchestrator',
       tools: { spawn: spawnTool },
     })
 
-    const agent = createAgent({ harness, provider: parentProvider })
+    const agent = createAgent({ harness, provider })
     const stats = await agent.run({ prompt: 'what is 6 * 7?' })
 
     expect(stats.turns).toBe(2)
-    // Verify the spawn tool was called
     expect(spawnTool.totalChildStats.turns).toBeGreaterThanOrEqual(1)
   })
 
   it('multiple spawns in sequence work correctly', async () => {
-    const childProvider = mockProvider([
-      { text: 'result A', done: true },
-      { text: 'result B', done: true },
-    ])
-
-    const spawnTool = createSpawnTool({
-      provider: childProvider,
-      harness: basic,
-    })
-
-    const parentProvider = mockProvider([
+    const provider = mockProvider([
       {
         text: 'Delegating task A',
         toolCalls: [{ id: 'tc1', name: 'spawn', input: { task: 'task A' } }],
       },
+      { text: 'result A', done: true },
       {
         text: 'Delegating task B',
         toolCalls: [{ id: 'tc2', name: 'spawn', input: { task: 'task B' } }],
       },
+      { text: 'result B', done: true },
       { text: 'Both done', done: true },
     ])
+
+    const spawnTool = createSpawnTool()
 
     const harness = defineHarness({
       name: 'orchestrator',
       tools: { spawn: spawnTool },
     })
 
-    const agent = createAgent({ harness, provider: parentProvider })
+    const agent = createAgent({ harness, provider })
     const stats = await agent.run({ prompt: 'do A and B' })
 
     expect(stats.turns).toBe(3)
@@ -327,33 +316,24 @@ describe('integration with parent agent', () => {
 // ---------------------------------------------------------------------------
 
 describe('child stats reporting', () => {
-  it('parent stats include children when parentHooks is set', async () => {
-    const childProvider = mockProvider([
-      { text: 'sub result', done: true },
-    ])
-
-    const parentProvider = mockProvider([
+  it('parent stats include children automatically via ToolContext', async () => {
+    const provider = mockProvider([
       {
         text: 'delegating',
         toolCalls: [{ id: 'tc1', name: 'spawn', input: { task: 'child task' } }],
       },
+      { text: 'sub result', done: true },
       { text: 'done', done: true },
     ])
 
-    // Create spawn tool first, then wire parentHooks after agent creation
-    const spawnTool = createSpawnTool({
-      provider: childProvider,
-      harness: basic,
-    })
+    const spawnTool = createSpawnTool()
 
     const harness = defineHarness({
       name: 'with-spawn',
       tools: { spawn: spawnTool },
     })
 
-    const agent = createAgent({ harness, provider: parentProvider })
-
-    // parentHooks are now passed automatically via ToolContext
+    const agent = createAgent({ harness, provider })
     const stats = await agent.run({ prompt: 'delegate' })
 
     expect(stats.children).toBeDefined()
@@ -379,20 +359,18 @@ describe('child stats reporting', () => {
 describe('abort propagation', () => {
   it('aborts child agents when ToolContext signal is aborted', async () => {
     const controller = new AbortController()
-    // Pre-abort so the child agent gets an already-aborted signal
     controller.abort()
 
     const provider = mockProvider([
       { text: 'should not reach here', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
 
     const result = await tool.execute(
       { task: 'long running task' },
-      mockToolCtx({ signal: controller.signal }),
+      mockToolCtx({ signal: controller.signal, provider }),
     )
 
-    // Child should complete gracefully with 0 stats (aborted path)
     expect(result).toContain('child-1')
     expect(result).toContain('Completed')
     expect(result).toContain('0 turns')
@@ -400,9 +378,9 @@ describe('abort propagation', () => {
 
   it('inherits signal from ToolContext automatically', async () => {
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
 
-    const result = await tool.execute({ task: 'test' }, mockToolCtx())
+    const result = await tool.execute({ task: 'test' }, mockToolCtx({ provider }))
     expect(result).toContain('Completed')
   })
 
@@ -410,14 +388,13 @@ describe('abort propagation', () => {
     const controller = new AbortController()
     controller.abort()
     const provider = mockProvider([{ text: 'done', done: true }])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
 
     const result = await tool.execute(
       { task: 'too late' },
-      mockToolCtx({ signal: controller.signal }),
+      mockToolCtx({ signal: controller.signal, provider }),
     )
 
-    // Child should still complete (aborted agent returns gracefully with 0 stats)
     expect(result).toContain('child-1')
   })
 })
@@ -432,17 +409,16 @@ describe('totalChildStats immutability', () => {
       { text: 'done', done: true },
       { text: 'done', done: true },
     ])
-    const tool = createSpawnTool({ provider, harness: basic })
+    const tool = createSpawnTool()
+    const ctx = mockToolCtx({ provider })
 
-    await tool.execute({ task: 'task 1' }, mockToolCtx())
+    await tool.execute({ task: 'task 1' }, ctx)
 
-    // Mutate the returned copy
     const stats1 = tool.totalChildStats as AgentStats
     stats1.turns = 9999
 
-    // Internal state should be unaffected
-    await tool.execute({ task: 'task 2' }, mockToolCtx())
-    expect(tool.totalChildStats.turns).toBeLessThan(100) // definitely not 9999+
+    await tool.execute({ task: 'task 2' }, ctx)
+    expect(tool.totalChildStats.turns).toBeLessThan(100)
   })
 })
 
@@ -452,7 +428,7 @@ describe('totalChildStats immutability', () => {
 
 describe('multi-turn child', () => {
   it('child can use tools and return multi-turn result', async () => {
-    const childProvider = mockProvider([
+    const provider = mockProvider([
       {
         text: 'Let me check',
         toolCalls: [{ id: 'tc1', name: 'shell', input: { command: 'echo 42' } }],
@@ -460,10 +436,37 @@ describe('multi-turn child', () => {
       { text: 'The answer is 42.', done: true },
     ])
 
-    const tool = createSpawnTool({ provider: childProvider, harness: basic })
-    const result = await tool.execute({ task: 'what is the answer?' }, mockToolCtx())
+    const tool = createSpawnTool()
+    const result = await tool.execute({ task: 'what is the answer?' }, mockToolCtx({ provider }))
 
     expect(result).toContain('Completed in 2 turns')
     expect(tool.totalChildStats.turns).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Harness override
+// ---------------------------------------------------------------------------
+
+describe('harness override', () => {
+  it('uses custom harness for children when specified', async () => {
+    const customHarness = defineHarness({
+      name: 'minimal',
+      tools: {},
+    })
+
+    const provider = mockProvider([{ text: 'done', done: true }])
+    const tool = createSpawnTool({ harness: customHarness })
+
+    const result = await tool.execute({ task: 'test' }, mockToolCtx({ provider }))
+    expect(result).toContain('Completed')
+  })
+
+  it('defaults to parent harness from ToolContext', async () => {
+    const provider = mockProvider([{ text: 'done', done: true }])
+    const tool = createSpawnTool()
+
+    const result = await tool.execute({ task: 'test' }, mockToolCtx({ provider }))
+    expect(result).toContain('Completed')
   })
 })

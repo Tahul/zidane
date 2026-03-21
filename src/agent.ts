@@ -147,6 +147,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
       const stats = await runLoop({
         provider,
         hooks,
+        harness,
         tools,
         toolSpecs,
         formattedTools,

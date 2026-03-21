@@ -1,2 +1,2 @@
-export { createSpawnTool } from './spawn'
-export type { ChildAgent, SpawnTool, SpawnToolOptions } from './spawn'
+export { createSpawnTool, spawn } from './spawn'
+export type { ChildAgent, SpawnToolOptions, SpawnToolState } from './spawn'

@@ -1,44 +1,25 @@
 /**
  * Spawn tool — create sub-agents from a parent agent.
  *
- * Usage:
- *   const spawnTool = createSpawnTool({ provider, harness })
- *   // Add to a harness's tools, or use in defineHarness()
+ * A static tool that reads provider and harness from ToolContext.
+ * Just add it to any harness's tools — no factory needed.
  *
- * The LLM calls the tool with a task prompt. A child agent runs
- * the task to completion and returns its final response.
+ * Usage:
+ *   import { spawn } from 'zidane'
+ *
+ *   const harness = defineHarness({
+ *     name: 'orchestrator',
+ *     tools: { ...basicTools, spawn },
+ *   })
  */
 
-import type { ExecutionContext } from '../contexts'
 import type { HarnessConfig, ToolContext, ToolDef } from '../harnesses'
-import type { Provider } from '../providers'
-import type { AgentStats, ThinkingLevel } from '../types'
+import type { AgentStats } from '../types'
 import { createAgent } from '../agent'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export interface SpawnToolOptions {
-  /** Provider for child agents */
-  provider: Provider
-  /** Harness for child agents (tools they can use) */
-  harness: HarnessConfig
-  /** Execution context for children. If omitted, children inherit from ToolContext or create their own. */
-  execution?: ExecutionContext
-  /** Maximum concurrent sub-agents (default: 3) */
-  maxConcurrent?: number
-  /** Model override for child agents */
-  model?: string
-  /** System prompt for child agents */
-  system?: string
-  /** Thinking level for child agents */
-  thinking?: ThinkingLevel
-  /** Called when a child agent starts */
-  onSpawn?: (child: ChildAgent) => void
-  /** Called when a child agent completes */
-  onComplete?: (child: ChildAgent, stats: AgentStats) => void
-}
 
 export interface ChildAgent {
   id: string
@@ -46,7 +27,7 @@ export interface ChildAgent {
   startedAt: number
 }
 
-export interface SpawnTool extends ToolDef {
+export interface SpawnToolState {
   /** Currently running children */
   readonly children: ReadonlyMap<string, ChildAgent>
   /** Aggregated stats from all completed children (returns a copy) */
@@ -54,16 +35,149 @@ export interface SpawnTool extends ToolDef {
 }
 
 // ---------------------------------------------------------------------------
-// createSpawnTool
+// State (module-scoped per spawn tool instance)
 // ---------------------------------------------------------------------------
 
-export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
-  const children = new Map<string, ChildAgent>()
-  let childCounter = 0
-  let activeCount = 0
+const children = new Map<string, ChildAgent>()
+let childCounter = 0
+let activeCount = 0
+const MAX_CONCURRENT = 3
+
+const _totalChildStats: AgentStats = {
+  totalIn: 0,
+  totalOut: 0,
+  turns: 0,
+  elapsed: 0,
+}
+
+// ---------------------------------------------------------------------------
+// spawn tool
+// ---------------------------------------------------------------------------
+
+/**
+ * Static spawn tool — add directly to any harness.
+ *
+ * Reads provider and harness from ToolContext at execution time.
+ * Children get the same harness as the parent (including spawn),
+ * so sub-agents can spawn their own children.
+ */
+export const spawn: ToolDef & SpawnToolState = {
+  get children() { return children },
+  get totalChildStats() { return { ..._totalChildStats } },
+
+  spec: {
+    name: 'spawn',
+    description: 'Spawn a sub-agent to work on a specific task. The sub-agent runs independently with its own tool access and returns its final response. Use this to delegate work, parallelize tasks, or isolate concerns.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        task: {
+          type: 'string',
+          description: 'The task prompt for the sub-agent. Be specific about what you want it to accomplish.',
+        },
+        system: {
+          type: 'string',
+          description: 'Optional system prompt override for this specific sub-agent.',
+        },
+      },
+      required: ['task'],
+    },
+  },
+
+  async execute(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+    const task = input.task as string
+    const systemOverride = input.system as string | undefined
+
+    if (activeCount >= MAX_CONCURRENT) {
+      return `Cannot spawn: ${activeCount}/${MAX_CONCURRENT} sub-agents already running. Wait for one to complete.`
+    }
+
+    const id = `child-${++childCounter}`
+    const child: ChildAgent = { id, task, startedAt: Date.now() }
+
+    const agent = createAgent({
+      harness: ctx.harness,
+      provider: ctx.provider,
+      execution: ctx.execution,
+    })
+
+    children.set(id, child)
+    activeCount++
+
+    try {
+      const stats = await agent.run({
+        prompt: task,
+        system: systemOverride,
+        signal: ctx.signal,
+      })
+
+      _totalChildStats.totalIn += stats.totalIn
+      _totalChildStats.totalOut += stats.totalOut
+      _totalChildStats.turns += stats.turns
+      _totalChildStats.elapsed += stats.elapsed
+
+      // Report to parent agent for automatic stats collection
+      await ctx.hooks.callHook('spawn:complete', {
+        id,
+        task,
+        stats,
+      })
+
+      const response = extractText(agent.messages.at(-1))
+
+      return [
+        `[sub-agent ${id}] Completed in ${stats.turns} turns (${stats.elapsed}ms)`,
+        `Tokens: ${stats.totalIn} in / ${stats.totalOut} out`,
+        '',
+        response || '(no text response)',
+      ].join('\n')
+    }
+    catch (err: any) {
+      return `[sub-agent ${id}] Error: ${err.message}`
+    }
+    finally {
+      activeCount--
+      await agent.destroy()
+      children.delete(id)
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// createSpawnTool (configurable factory)
+// ---------------------------------------------------------------------------
+
+export interface SpawnToolOptions {
+  /** Maximum concurrent sub-agents (default: 3) */
+  maxConcurrent?: number
+  /** Model override for child agents */
+  model?: string
+  /** System prompt for child agents */
+  system?: string
+  /** Thinking level for child agents */
+  thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high'
+  /** Override harness for children (defaults to parent's harness from ToolContext) */
+  harness?: HarnessConfig
+  /** Called when a child agent starts */
+  onSpawn?: (child: ChildAgent) => void
+  /** Called when a child agent completes */
+  onComplete?: (child: ChildAgent, stats: AgentStats) => void
+}
+
+/**
+ * Create a configured spawn tool with custom options.
+ *
+ * For most cases, use the static `spawn` export directly.
+ * Use this factory when you need custom concurrency limits,
+ * model overrides, or lifecycle callbacks.
+ */
+export function createSpawnTool(options: SpawnToolOptions = {}): ToolDef & SpawnToolState {
+  const localChildren = new Map<string, ChildAgent>()
+  let localCounter = 0
+  let localActiveCount = 0
   const maxConcurrent = options.maxConcurrent ?? 3
 
-  const _totalChildStats: AgentStats = {
+  const localStats: AgentStats = {
     totalIn: 0,
     totalOut: 0,
     turns: 0,
@@ -71,8 +185,8 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
   }
 
   return {
-    get children() { return children },
-    get totalChildStats() { return { ..._totalChildStats } },
+    get children() { return localChildren },
+    get totalChildStats() { return { ...localStats } },
 
     spec: {
       name: 'spawn',
@@ -93,25 +207,25 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
       },
     },
 
-    async execute(input: Record<string, unknown>, toolCtx: ToolContext): Promise<string> {
+    async execute(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
       const task = input.task as string
       const systemOverride = input.system as string | undefined
 
-      if (activeCount >= maxConcurrent) {
-        return `Cannot spawn: ${activeCount}/${maxConcurrent} sub-agents already running. Wait for one to complete.`
+      if (localActiveCount >= maxConcurrent) {
+        return `Cannot spawn: ${localActiveCount}/${maxConcurrent} sub-agents already running. Wait for one to complete.`
       }
 
-      const id = `child-${++childCounter}`
+      const id = `child-${++localCounter}`
       const child: ChildAgent = { id, task, startedAt: Date.now() }
 
       const agent = createAgent({
-        harness: options.harness,
-        provider: options.provider,
-        execution: options.execution ?? toolCtx.execution,
+        harness: options.harness ?? ctx.harness,
+        provider: ctx.provider,
+        execution: ctx.execution,
       })
 
-      children.set(id, child)
-      activeCount++
+      localChildren.set(id, child)
+      localActiveCount++
       options.onSpawn?.(child)
 
       try {
@@ -120,18 +234,17 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
           model: options.model,
           system: systemOverride ?? options.system,
           thinking: options.thinking,
-          signal: toolCtx.signal,
+          signal: ctx.signal,
         })
 
-        _totalChildStats.totalIn += stats.totalIn
-        _totalChildStats.totalOut += stats.totalOut
-        _totalChildStats.turns += stats.turns
-        _totalChildStats.elapsed += stats.elapsed
+        localStats.totalIn += stats.totalIn
+        localStats.totalOut += stats.totalOut
+        localStats.turns += stats.turns
+        localStats.elapsed += stats.elapsed
 
         options.onComplete?.(child, stats)
 
-        // Report to parent agent for automatic stats collection
-        await toolCtx.hooks.callHook('spawn:complete', {
+        await ctx.hooks.callHook('spawn:complete', {
           id,
           task,
           stats,
@@ -150,9 +263,9 @@ export function createSpawnTool(options: SpawnToolOptions): SpawnTool {
         return `[sub-agent ${id}] Error: ${err.message}`
       }
       finally {
-        activeCount--
+        localActiveCount--
         await agent.destroy()
-        children.delete(id)
+        localChildren.delete(id)
       }
     },
   }

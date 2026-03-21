@@ -8,7 +8,7 @@
 import type { Hookable } from 'hookable'
 import type { AgentHooks } from './agent'
 import type { ExecutionContext, ExecutionHandle } from './contexts'
-import type { ToolContext, ToolDef } from './harnesses'
+import type { HarnessConfig, ToolContext, ToolDef } from './harnesses'
 import type { Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentStats, ThinkingLevel, ToolExecutionMode } from './types'
 import { validateToolArgs } from './tools/validation'
@@ -16,6 +16,7 @@ import { validateToolArgs } from './tools/validation'
 export interface LoopContext {
   provider: Provider
   hooks: Hookable<AgentHooks>
+  harness: HarnessConfig
   tools: Record<string, ToolDef>
   toolSpecs: ToolSpec[]
   formattedTools: unknown[]
@@ -187,10 +188,12 @@ async function executeSingleTool(
 
   try {
     const toolCtx: ToolContext = {
+      provider: ctx.provider,
       signal: ctx.signal,
       execution: ctx.execution,
       handle: ctx.handle,
       hooks: ctx.hooks,
+      harness: ctx.harness,
     }
     output = await toolDef.execute(call.input, toolCtx)
   }
