@@ -1,4 +1,4 @@
-import type { ToolContext, ToolDef } from '.'
+import type { ToolDef } from '.'
 import { defineHarness } from '.'
 import { listFiles, readFile, shell, writeFile } from '../tools'
 
