@@ -7,7 +7,7 @@ import type { Hookable } from 'hookable'
 import type { ExecutionContext, ExecutionHandle } from './contexts'
 import type { HarnessConfig } from './harnesses'
 import type { Message, Provider, StreamOptions, ToolSpec } from './providers'
-import type { AgentRunOptions, AgentStats, ToolExecutionMode } from './types'
+import type { AgentRunOptions, AgentStats, ChildRunStats, ToolExecutionMode } from './types'
 import { createHooks } from 'hookable'
 import { createProcessContext } from './contexts'
 import { runLoop } from './loop'
@@ -29,6 +29,7 @@ export interface AgentHooks {
   'tool:transform': (ctx: { name: string, input: Record<string, unknown>, result: string, isError: boolean }) => void
   'context:transform': (ctx: { messages: Message[] }) => void
   'steer:inject': (ctx: { message: string }) => void
+  'spawn:complete': (ctx: ChildRunStats) => void
   'agent:abort': (ctx: object) => void
   'agent:done': (ctx: AgentStats) => void
 }
@@ -87,8 +88,26 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
 
     running = true
     abortController = new AbortController()
+
+    // If an external signal is provided, wire it to our internal controller
+    if (options.signal) {
+      if (options.signal.aborted) {
+        abortController.abort()
+      }
+      else {
+        const onExternalAbort = () => abortController?.abort()
+        options.signal.addEventListener('abort', onExternalAbort, { once: true })
+      }
+    }
+
     idlePromise = new Promise<void>((resolve) => {
       idleResolve = resolve
+    })
+
+    // Collect child agent stats reported via spawn:complete hook
+    const childrenStats: ChildRunStats[] = []
+    const unregisterSpawnHook = hooks.hook('spawn:complete', (ctx) => {
+      childrenStats.push(ctx)
     })
 
     // Spawn execution context
@@ -128,6 +147,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
       const stats = await runLoop({
         provider,
         hooks,
+        harness,
         tools,
         toolSpecs,
         formattedTools,
@@ -136,13 +156,19 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
         thinking,
         toolExecution,
         signal: abortController.signal,
+        execution: executionContext,
+        handle: executionHandle!,
         steeringQueue,
         followUpQueue,
         messages,
       })
 
-      await hooks.callHook('agent:done', stats)
-      return stats
+      const finalStats: AgentStats = {
+        ...stats,
+        children: childrenStats.length > 0 ? childrenStats : undefined,
+      }
+      await hooks.callHook('agent:done', finalStats)
+      return finalStats
     }
     catch (err: any) {
       // If aborted, provider may throw — return gracefully
@@ -154,6 +180,7 @@ export function createAgent({ harness, provider, toolExecution = 'sequential', e
       throw err
     }
     finally {
+      unregisterSpawnHook()
       running = false
       abortController = undefined
       steeringQueue.length = 0

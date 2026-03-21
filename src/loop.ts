@@ -7,7 +7,8 @@
 
 import type { Hookable } from 'hookable'
 import type { AgentHooks } from './agent'
-import type { ToolDef } from './harnesses'
+import type { ExecutionContext, ExecutionHandle } from './contexts'
+import type { HarnessConfig, ToolContext, ToolDef } from './harnesses'
 import type { Provider, StreamOptions, ToolSpec } from './providers'
 import type { AgentStats, ThinkingLevel, ToolExecutionMode } from './types'
 import { validateToolArgs } from './tools/validation'
@@ -15,6 +16,7 @@ import { validateToolArgs } from './tools/validation'
 export interface LoopContext {
   provider: Provider
   hooks: Hookable<AgentHooks>
+  harness: HarnessConfig
   tools: Record<string, ToolDef>
   toolSpecs: ToolSpec[]
   formattedTools: unknown[]
@@ -23,6 +25,8 @@ export interface LoopContext {
   thinking: ThinkingLevel
   toolExecution: ToolExecutionMode
   signal: AbortSignal
+  execution: ExecutionContext
+  handle: ExecutionHandle
   steeringQueue: string[]
   followUpQueue: string[]
   messages: ReturnType<Provider['userMessage']>[]
@@ -183,7 +187,15 @@ async function executeSingleTool(
   let isError = false
 
   try {
-    output = await toolDef.execute(call.input)
+    const toolCtx: ToolContext = {
+      provider: ctx.provider,
+      signal: ctx.signal,
+      execution: ctx.execution,
+      handle: ctx.handle,
+      hooks: ctx.hooks,
+      harness: ctx.harness,
+    }
+    output = await toolDef.execute(call.input, toolCtx)
   }
   catch (err: any) {
     await ctx.hooks.callHook('tool:error', { name: call.name, input: call.input, error: err })

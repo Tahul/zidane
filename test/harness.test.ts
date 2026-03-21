@@ -20,6 +20,7 @@ describe('basic harness', () => {
     expect(names).toContain('readFile')
     expect(names).toContain('writeFile')
     expect(names).toContain('listFiles')
+    expect(names).toContain('spawn')
   })
 
   describe('shell', () => {
